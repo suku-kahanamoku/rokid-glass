@@ -30,6 +30,7 @@ class MainActivity : AppCompatActivity() {
     private var glassesConnected = false
     private var viewRequested = false
     private var pendingProfileView: String? = null
+    private var pendingProfileUpdate: String? = null
     private var lastProfileId: Int? = null
     private val ioExecutor = Executors.newSingleThreadExecutor()
 
@@ -78,6 +79,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 val profile = fetchRandomProfile()
                 pendingProfileView = createProfileView(profile)
+                pendingProfileUpdate = createProfileUpdate(profile)
                 lastProfileId = profile.id
 
                 runOnUiThread {
@@ -250,10 +252,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateProfileInGlasses() {
-        val profileView = pendingProfileView ?: return
+        val profileUpdate = pendingProfileUpdate ?: return
         showStatus(getString(R.string.rokid_sending), enableButton = false)
 
-        if (!cxrLink.customViewUpdate(profileView)) {
+        if (!cxrLink.customViewUpdate(profileUpdate)) {
             showStatus(getString(R.string.rokid_connection_failed), enableButton = true)
         }
     }
@@ -354,12 +356,11 @@ class MainActivity : AppCompatActivity() {
         val children = mutableListOf<JSONObject>()
 
         fun addText(id: String, text: String, size: Int, color: String, bold: Boolean = false) {
-            if (text.isBlank()) return
             val props = JSONObject()
                 .put("id", id)
                 .put("layout_width", "match_parent")
                 .put("layout_height", "wrap_content")
-                .put("text", text.replace(Regex("\\s+"), " ").trim())
+                .put("text", text)
                 .put("textColor", color)
                 .put("textSize", "${size}sp")
                 .put("gravity", "center")
@@ -370,21 +371,15 @@ class MainActivity : AppCompatActivity() {
                 .put("props", props)
         }
 
-        addText("profileLabel", "NÁHODNÝ PROFIL", 12, "#FF69D99A", bold = true)
-        addText("profileName", profile.name.ifBlank { "Zoo klient" }, 22, "#FFFFFFFF", bold = true)
-        addText("clientType", profile.clientType, 14, "#FF69D99A", bold = true)
-        addText("summary", profile.summary.take(180), 16, "#FFE8F5EC")
-        addText("aura", profile.aura.take(120), 14, "#FFB9C8BE")
-        addText("behavior", profile.behavior.take(150), 14, "#FFD5DED8")
-        addText(
-            "animals",
-            profile.preferredAnimals.take(4).joinToString(", ").let {
-                if (it.isBlank()) "" else "Oblíbená zvířata: $it"
-            },
-            13,
-            "#FF69D99A",
-        )
-        addText("potential", profile.businessPotential.take(100), 13, "#FFFFD166")
+        val texts = profileTexts(profile)
+        addText("profileLabel", texts.getValue("profileLabel"), 12, "#FF69D99A", bold = true)
+        addText("profileName", texts.getValue("profileName"), 22, "#FFFFFFFF", bold = true)
+        addText("clientType", texts.getValue("clientType"), 14, "#FF69D99A", bold = true)
+        addText("summary", texts.getValue("summary"), 16, "#FFE8F5EC")
+        addText("aura", texts.getValue("aura"), 14, "#FFB9C8BE")
+        addText("behavior", texts.getValue("behavior"), 14, "#FFD5DED8")
+        addText("animals", texts.getValue("animals"), 13, "#FF69D99A")
+        addText("potential", texts.getValue("potential"), 13, "#FFFFD166")
 
         return JSONObject()
             .put("type", "LinearLayout")
@@ -401,4 +396,36 @@ class MainActivity : AppCompatActivity() {
             .put("children", JSONArray(children))
             .toString()
     }
+
+    private fun createProfileUpdate(profile: ZooProfile): String {
+        val updates = JSONArray()
+        profileTexts(profile).forEach { (id, text) ->
+            updates.put(
+                JSONObject()
+                    .put("action", "update")
+                    .put("id", id)
+                    .put("props", JSONObject().put("text", text)),
+            )
+        }
+        return updates.toString()
+    }
+
+    private fun profileTexts(profile: ZooProfile): Map<String, String> =
+        linkedMapOf(
+            "profileLabel" to "NÁHODNÝ PROFIL",
+            "profileName" to cleanText(profile.name.ifBlank { "Zoo klient" }),
+            "clientType" to cleanText(profile.clientType),
+            "summary" to cleanText(profile.summary, 180),
+            "aura" to cleanText(profile.aura, 120),
+            "behavior" to cleanText(profile.behavior, 150),
+            "animals" to profile.preferredAnimals
+                .take(4)
+                .joinToString(", ")
+                .let { if (it.isBlank()) "" else "Oblíbená zvířata: $it" }
+                .let(::cleanText),
+            "potential" to cleanText(profile.businessPotential, 100),
+        )
+
+    private fun cleanText(text: String, maxLength: Int = Int.MAX_VALUE): String =
+        text.replace(Regex("\\s+"), " ").trim().take(maxLength)
 }

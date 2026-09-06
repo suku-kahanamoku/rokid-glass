@@ -78,7 +78,8 @@ Hlavní integrace je v
 8. načte profily z ostrého Zoo CRM API;
 9. vybere náhodný vyplněný profil a zavolá `customViewOpen(...)` s jeho JSON
    obrazovkou;
-10. při dalším stisknutí použije `customViewUpdate(...)` pro jiný profil;
+10. při dalším stisknutí pošle do `customViewUpdate(...)` inkrementální změny
+    uzlů ve formátu `action`, `id` a `props` pro jiný profil;
 11. zpracuje otevření, aktualizaci, zavření a případnou chybu pohledu.
 
 Profil se neposílá, dokud nejsou připravené obě části spojení:
@@ -197,6 +198,9 @@ curl -fsSL \
 
 Po úspěšném otevření se tlačítko znovu povolí. Další stisknutí stáhne seznam,
 vybere jiný profil a aktualizuje už otevřený pohled přes `customViewUpdate()`.
+Aktualizace neposílá celý strom obrazovky, ale pole změn jednotlivých textových
+uzlů. Všechny uzly proto existují už v prvním pohledu, i když je některá
+hodnota profilu prázdná.
 
 ## Diagnostika
 
@@ -239,4 +243,5 @@ Detection** a test zopakovat.
 - fyzické zobrazení původního `Hello world Rokid!` v brýlích: úspěšně ověřené
 - Zoo API odpověď a dostupnost profilů: úspěšně ověřené
 - sestavení a lint nové profilové verze: úspěšné
-- fyzické zobrazení nové profilové karty: čeká na test s připojeným telefonem
+- fyzické zobrazení první Zoo profilové karty: úspěšně ověřené
+- přepnutí na jiný profil druhým kliknutím: čeká na fyzický test nové verze
