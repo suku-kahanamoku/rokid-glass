@@ -3,8 +3,9 @@
 Android aplikace v Kotlinu, která přes oficiální CXR-L SDK a aplikaci Hi Rokid
 zobrazuje vlastní `CUSTOMVIEW` v consumer Rokid Glasses.
 
-Po stisknutí tlačítka **Zobrazit v brýlích** aplikace odešle do brýlí zelený
-text **Hello world Rokid!**.
+Po stisknutí tlačítka **Zobrazit náhodný profil v brýlích** aplikace načte
+profil z ostrého Zoo CRM API a zobrazí jej jako kartu v brýlích. Dalším
+stisknutím načte jiný náhodný profil.
 
 ## Jak spojení funguje
 
@@ -37,7 +38,7 @@ Pokud Android SDK není automaticky nalezené, vytvoř lokální a neverzovaný
 soubor `local.properties`:
 
 ```properties
-sdk.dir=/home/suku/Android/sdk
+sdk.dir=/home/suku/Android/Sdk
 ```
 
 ## Co je v projektu nastavené
@@ -74,10 +75,13 @@ Hlavní integrace je v
 5. převezme autorizační token;
 6. zavolá `cxrLink.connect(token)`;
 7. počká současně na CXR spojení a Bluetooth spojení s brýlemi;
-8. zavolá `customViewOpen(...)` s JSON popisem obrazovky;
-9. zpracuje otevření, zavření a případnou chybu pohledu.
+8. načte profily z ostrého Zoo CRM API;
+9. vybere náhodný vyplněný profil a zavolá `customViewOpen(...)` s jeho JSON
+   obrazovkou;
+10. při dalším stisknutí použije `customViewUpdate(...)` pro jiný profil;
+11. zpracuje otevření, aktualizaci, zavření a případnou chybu pohledu.
 
-Text se neposílá, dokud nejsou připravené obě části spojení:
+Profil se neposílá, dokud nejsou připravené obě části spojení:
 
 ```kotlin
 if (!cxrConnected || !glassesConnected || viewRequested) return
@@ -91,9 +95,9 @@ if (!cxrConnected || !glassesConnected || viewRequested) return
 4. Připoj telefon k počítači datovým USB kabelem.
 5. V Android Studiu vyber připojený telefon.
 6. Klikni na zelené **Run ▶**.
-7. V aplikaci v telefonu klikni jednou na **Zobrazit v brýlích**.
+7. V aplikaci v telefonu klikni na **Zobrazit náhodný profil v brýlích**.
 8. Při prvním spuštění potvrď autorizaci v Hi Rokid.
-9. Počkej na stav **Text je zobrazený v brýlích.**
+9. Počkej na stav **Profil je zobrazený. Kliknutím načteš další.**
 
 Android Studio automaticky aplikaci sestaví, nainstaluje do telefonu a spustí.
 
@@ -146,35 +150,42 @@ ANDROID_SERIAL=HZQL1838HAL22301864 ./gradlew installDebug
 
 Sériové číslo nahraď hodnotou, kterou na tvém počítači vypíše `adb devices`.
 
-## Jak změnit zobrazovaný text
+## Zoo CRM API
 
-Otevři:
+Aplikace bez přihlášení volá:
 
 ```text
-app/src/main/java/cz/suku/rokidglass/MainActivity.kt
+https://zoo-crm.netlify.app/api/admin/client?limit=100&projection=first_name,last_name,profile,client_type
 ```
 
-V konstantě `HELLO_WORLD_VIEW` změň:
+Parametr `projection` záměrně omezuje data. Do telefonu ani brýlí se nestahuje
+e-mail, telefon nebo heslo. Z odpovědi se vybírají jen záznamy s vyplněným
+objektem `profile`.
+
+Adresa endpointu je v
+`app/src/main/java/cz/suku/rokidglass/MainActivity.kt` v konstantě:
 
 ```kotlin
-"text": "Hello world Rokid!",
+const val PROFILES_URL = "https://zoo-crm.netlify.app/api/admin/client..."
 ```
 
-Například na:
+Vzhled karty vytváří metoda `createProfileView()`. Zobrazuje podle dostupnosti:
 
-```kotlin
-"text": "Ahoj z mojí aplikace!",
+- jméno a typ klienta;
+- shrnutí, auru a chování;
+- oblíbená zvířata;
+- obchodní potenciál.
+
+Texty jsou zkrácené na délku vhodnou pro malý displej brýlí. JSON se vytváří
+přes `JSONObject`, takže uvozovky a další znaky z API nemohou poškodit popis
+`CUSTOMVIEW`.
+
+Pro rychlé ověření dostupnosti API z Linuxu:
+
+```bash
+curl -fsSL \
+  'https://zoo-crm.netlify.app/api/admin/client?limit=1&projection=first_name,last_name,profile,client_type'
 ```
-
-Ve stejném JSON můžeš změnit barvu a velikost:
-
-```kotlin
-"textColor": "#FF00FF00",
-"textSize": "24sp",
-```
-
-Potom znovu klikni na **Run ▶** nebo aplikaci sestav a nainstaluj příkazy
-uvedenými výše.
 
 ## Stavové callbacky
 
@@ -184,8 +195,8 @@ uvedenými výše.
 - `onCustomViewClosed()` oznamuje, že brýle pohled zavřely.
 - `onCustomViewError()` vrací chybu vykreslení nebo přenosu.
 
-Po úspěšném otevření zůstane tlačítko vypnuté, aby opakované kliknutí
-nevytvořilo druhou relaci a nezavřelo již zobrazený pohled.
+Po úspěšném otevření se tlačítko znovu povolí. Další stisknutí stáhne seznam,
+vybere jiný profil a aktualizuje už otevřený pohled přes `customViewUpdate()`.
 
 ## Diagnostika
 
@@ -225,4 +236,7 @@ Detection** a test zopakovat.
 - kontrola `lintDebug`: úspěšná
 - instalace přes ADB na Nokia 3.4 s Androidem 12: úspěšná
 - autorizace přes globální Hi Rokid: úspěšná
-- fyzické zobrazení `Hello world Rokid!` v brýlích: úspěšně ověřené
+- fyzické zobrazení původního `Hello world Rokid!` v brýlích: úspěšně ověřené
+- Zoo API odpověď a dostupnost profilů: úspěšně ověřené
+- sestavení a lint nové profilové verze: úspěšné
+- fyzické zobrazení nové profilové karty: čeká na test s připojeným telefonem

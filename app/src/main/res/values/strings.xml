@@ -1,8 +1,10 @@
 <resources>
     <string name="app_name">Rokid Glass</string>
     <string name="rokid_disconnected">Rokid: disconnected</string>
-    <string name="connect_rokid">Zobrazit v brýlích</string>
-    <string name="hello_rokid">Hello world Rokid!</string>
+    <string name="connect_rokid">Zobrazit náhodný profil v brýlích</string>
+    <string name="profile_loading">Načítám náhodný profil ze Zoo CRM…</string>
+    <string name="profile_loading_failed">Profil se nepodařilo načíst: %1$s</string>
+    <string name="unknown_error">neznámá chyba</string>
     <string name="rokid_authorizing">Čekám na autorizaci v Hi Rokid…</string>
     <string name="rokid_connecting">Připojuji se k brýlím…</string>
     <string name="rokid_missing_app">Nainstaluj nebo aktualizuj aplikaci Hi Rokid.</string>
@@ -10,8 +12,8 @@
     <string name="rokid_auth_failed">Autorizace přes Hi Rokid selhala.</string>
     <string name="rokid_connection_failed">Spojení s brýlemi selhalo.</string>
     <string name="rokid_bluetooth_waiting">CXR je připojené, čekám na Bluetooth brýlí…</string>
-    <string name="rokid_sending">Posílám text do brýlí…</string>
-    <string name="rokid_opened">Text je zobrazený v brýlích.</string>
+    <string name="rokid_sending">Posílám profil do brýlí…</string>
+    <string name="rokid_opened">Profil je zobrazený. Kliknutím načteš další.</string>
     <string name="rokid_view_closed">Zobrazení v brýlích bylo zavřeno.</string>
     <string name="rokid_view_error">Chyba zobrazení v brýlích: %1$d – %2$s</string>
 </resources>
