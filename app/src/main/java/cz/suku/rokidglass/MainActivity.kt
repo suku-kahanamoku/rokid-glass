@@ -20,12 +20,7 @@ import com.rokid.cxr.link.utils.GlassInfo
 import com.rokid.sprite.aiapp.externalapp.auth.AuthResult
 import com.rokid.sprite.aiapp.externalapp.auth.AuthorizationHelper
 import com.rokid.sprite.aiapp.externalapp.auth.GlassPermission
-import org.json.JSONArray
-import org.json.JSONObject
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
     private lateinit var status: TextView
@@ -41,12 +36,7 @@ class MainActivity : AppCompatActivity() {
     private var appStatusQueryInProgress = false
     private var appInstallInProgress = false
     private var appStartInProgress = false
-    private var lastProfileId: Int? = null
-    private var lastSentProfileId: Int? = null
     private var pendingDeviceVersion: Long? = null
-    private var pendingProfile: FannProfile? = null
-    @Volatile private var profileLoading = false
-    private val ioExecutor = Executors.newSingleThreadExecutor()
 
     private val cxrLink: CXRLink by lazy {
         CXRLink(applicationContext).apply {
@@ -78,7 +68,7 @@ class MainActivity : AppCompatActivity() {
 
         actionButton = Button(this).apply {
             text = getString(R.string.connect_rokid)
-            setOnClickListener { loadProfile(ProfileDirection.NEXT) }
+            setOnClickListener { launchDeviceApp() }
         }
         stopButton = Button(this).apply {
             text = getString(R.string.stop_device_app)
@@ -106,109 +96,11 @@ class MainActivity : AppCompatActivity() {
         setContentView(layout)
     }
 
-    private fun loadProfile(direction: ProfileDirection) {
-        if (profileLoading) return
-        profileLoading = true
-        showStatus(getString(R.string.profile_loading), enableButton = false)
-
-        ioExecutor.execute {
-            try {
-                val profile = fetchProfileInDirection(direction)
-                pendingProfile = profile
-                lastProfileId = profile.id
-
-                runOnUiThread {
-                    profileLoading = false
-                    if (cxrConnected && glassesConnected) {
-                        ensureDeviceAppReady()
-                    } else {
-                        authorizeAndConnect()
-                    }
-                }
-            } catch (error: Exception) {
-                profileLoading = false
-                showStatus(
-                    getString(
-                        R.string.profile_loading_failed,
-                        error.message ?: getString(R.string.unknown_error),
-                    ),
-                    enableButton = true,
-                )
-            }
-        }
-    }
-
-    private fun fetchProfileInDirection(direction: ProfileDirection): FannProfile {
-        var lastError: Exception? = null
-        val ids = FANN_PROFILE_IDS.toList()
-        val currentIndex = ids.indexOf(lastProfileId)
-        val candidateIds = if (currentIndex < 0) {
-            ids
+    private fun launchDeviceApp() {
+        if (cxrConnected && glassesConnected) {
+            ensureDeviceAppReady()
         } else {
-            (1..ids.size).map { distance ->
-                val index = (currentIndex + direction.step * distance).mod(ids.size)
-                ids[index]
-            }
-        }
-
-        for (profileId in candidateIds) {
-            try {
-                return fetchProfile(profileId)
-            } catch (error: Exception) {
-                lastError = error
-            }
-        }
-
-        throw lastError ?: IllegalStateException("FAnn API neobsahuje dostupný profil")
-    }
-
-    private fun fetchProfile(profileId: Int): FannProfile {
-        val connection = (URL("$PROFILE_URL/$profileId").openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = NETWORK_TIMEOUT_MS
-            readTimeout = NETWORK_TIMEOUT_MS
-            setRequestProperty("Accept", "application/json")
-        }
-
-        try {
-            val responseCode = connection.responseCode
-            if (responseCode !in 200..299) {
-                throw IllegalStateException("FAnn API vrátilo HTTP $responseCode")
-            }
-
-            val response = connection.inputStream.bufferedReader().use { it.readText() }
-            val root = JSONObject(response)
-            if (!root.optBoolean("success")) {
-                throw IllegalStateException("FAnn API nevrátilo úspěšnou odpověď")
-            }
-
-            val data = root.optJSONObject("data")
-                ?: throw IllegalStateException("FAnn API neobsahuje profil")
-            if (data.optInt("published", 1) != 1) {
-                throw IllegalStateException("FAnn profil není publikovaný")
-            }
-
-            fun stringList(name: String): List<String> {
-                val values = data.optJSONArray(name) ?: return emptyList()
-                return buildList {
-                    for (index in 0 until values.length()) {
-                        values.optString(index)
-                            .takeIf { it.isNotBlank() }
-                            ?.let(::add)
-                    }
-                }
-            }
-
-            return FannProfile(
-                id = data.optInt("id"),
-                profileNumber = data.optInt("profile_number"),
-                name = data.optString("name"),
-                selectionNeed = data.optString("selection_need"),
-                questions = stringList("questions"),
-                objections = stringList("objections"),
-            )
-        } finally {
-            connection.disconnect()
+            authorizeAndConnect()
         }
     }
 
@@ -276,10 +168,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun ensureDeviceAppReady() {
-        if (!cxrConnected || !glassesConnected || pendingProfile == null) return
+        if (!cxrConnected || !glassesConnected) return
 
         when {
-            appRunning && deviceReady -> sendPendingProfile()
+            appRunning && deviceReady ->
+                showStatus(getString(R.string.rokid_opened), enableButton = true)
             appRunning ->
                 showStatus(getString(R.string.rokid_waiting_device_app), enableButton = false)
             appInstalled -> startDeviceApp()
@@ -329,7 +222,6 @@ class MainActivity : AppCompatActivity() {
         if (appStartInProgress) return
         appStartInProgress = true
         deviceReady = false
-        lastSentProfileId = null
         showStatus(getString(R.string.rokid_starting_device_app), enableButton = false)
         cxrLink.appStart(DEVICE_APP_ACTIVITY, glassAppCallback)
     }
@@ -351,25 +243,6 @@ class MainActivity : AppCompatActivity() {
                 cxrLink.appUninstall(glassAppCallback)
             }
             .show()
-    }
-
-    private fun sendPendingProfile() {
-        val profile = pendingProfile ?: return
-        if (!appRunning || !deviceReady || profile.id == lastSentProfileId) return
-
-        showStatus(getString(R.string.rokid_sending), enableButton = false)
-        val result = cxrLink.sendCustomCmd(
-            PROFILE_COMMAND,
-            Caps().apply { write(profile.toDeviceJson()) },
-            byteArrayOf(),
-        )
-        if (result == 0) {
-            lastSentProfileId = profile.id
-            showStatus(getString(R.string.rokid_opened), enableButton = true)
-            actionButton.text = getString(R.string.load_next_profile)
-        } else {
-            showStatus(getString(R.string.rokid_send_failed, result ?: -1), enableButton = true)
-        }
     }
 
     private val linkCallback = object : ICXRLinkCbk {
@@ -469,8 +342,7 @@ class MainActivity : AppCompatActivity() {
                 appRunning = resumed
                 deviceReady = resumed
                 if (resumed) {
-                    lastSentProfileId = null
-                    sendPendingProfile()
+                    showStatus(getString(R.string.rokid_opened), enableButton = true)
                 } else {
                     showStatus(getString(R.string.rokid_device_app_closed), enableButton = true)
                 }
@@ -510,17 +382,21 @@ class MainActivity : AppCompatActivity() {
                     appRunning = true
                     deviceReady = true
                     updateDeviceControls()
-                    sendPendingProfile()
+                    showStatus(getString(R.string.rokid_opened), enableButton = true)
                 }
                 else -> runOnUiThread {
                     when {
-                        caps.at(0).string.startsWith(NEXT_PROFILE_EVENT) -> {
-                            showStatus(getString(R.string.glasses_next_profile), enableButton = false)
-                            loadProfile(ProfileDirection.NEXT)
+                        caps.at(0).string.startsWith(NETWORK_TEST_OK_EVENT) -> {
+                            showStatus(
+                                getString(
+                                    R.string.glasses_direct_api_ok,
+                                    caps.at(0).string.substringAfter(':', "neznámá síť"),
+                                ),
+                                enableButton = true,
+                            )
                         }
-                        caps.at(0).string.startsWith(PREVIOUS_PROFILE_EVENT) -> {
-                            showStatus(getString(R.string.glasses_previous_profile), enableButton = false)
-                            loadProfile(ProfileDirection.PREVIOUS)
+                        caps.at(0).string.startsWith(NETWORK_TEST_FAILED_EVENT) -> {
+                            showStatus(getString(R.string.glasses_direct_api_failed), enableButton = true)
                         }
                     }
                 }
@@ -549,10 +425,6 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val AUTH_REQUEST_CODE = 1001
-        const val NETWORK_TIMEOUT_MS = 15_000
-        const val PROFILE_URL = "https://fann-crm.netlify.app/api/admin/profile"
-        val FANN_PROFILE_IDS = 11..20
-
         const val DEVICE_APP_PACKAGE = "cz.suku.rokidglass.device"
         const val DEVICE_APP_ACTIVITY = "cz.suku.rokidglass.device.MainActivity"
         const val DEVICE_APK_ASSET = "rokid-glass-device.apk"
@@ -560,42 +432,9 @@ class MainActivity : AppCompatActivity() {
         const val DEVICE_PREFS = "rokid_device_app"
         const val DEVICE_VERSION_KEY = "installed_version"
 
-        const val PROFILE_COMMAND = "cz.suku.rokidglass.profile"
         const val EVENT_COMMAND = "cz.suku.rokidglass.event"
         const val READY_EVENT = "ready"
-        const val NEXT_PROFILE_EVENT = "next_profile"
-        const val PREVIOUS_PROFILE_EVENT = "previous_profile"
-    }
-
-    private enum class ProfileDirection(val step: Int) {
-        NEXT(1),
-        PREVIOUS(-1),
-    }
-
-    private data class FannProfile(
-        val id: Int,
-        val profileNumber: Int,
-        val name: String,
-        val selectionNeed: String,
-        val questions: List<String>,
-        val objections: List<String>,
-    ) {
-        fun toDeviceJson(): String = JSONObject()
-            .put("id", id)
-            .put("profileNumber", profileNumber)
-            .put("name", clean(name.ifBlank { "FAnn zákazník" }))
-            .put("selectionNeed", clean(selectionNeed, 180))
-            .put(
-                "questions",
-                JSONArray(questions.take(3).map { clean(it, 130) }),
-            )
-            .put(
-                "objections",
-                JSONArray(objections.take(2).map { clean(it, 100) }),
-            )
-            .toString()
-
-        private fun clean(text: String, maxLength: Int = Int.MAX_VALUE): String =
-            text.replace(Regex("\\s+"), " ").trim().take(maxLength)
+        const val NETWORK_TEST_OK_EVENT = "network_test_ok"
+        const val NETWORK_TEST_FAILED_EVENT = "network_test_failed"
     }
 }

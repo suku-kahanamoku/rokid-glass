@@ -9,9 +9,9 @@ rokid-glass (telefon)
   -> rokid-glass-device (aplikace v brýlích)
 ```
 
-Telefon stahuje profil z FAnn API, instaluje a spouští device APK v brýlích a
-posílá jí profil. Device aplikace profil vykreslí, posunem dopředu nebo dozadu
-listuje profily a dvojklikem se zavře do hlavního menu brýlí.
+Telefon instaluje, aktualizuje a spouští device APK v brýlích. Device aplikace
+se potom přes Wi-Fi připojuje k FAnn API sama, profil vykreslí, posunem dopředu
+nebo dozadu listuje profily a dvojklikem se zavře do hlavního menu brýlí.
 
 ## Projekty
 
@@ -34,7 +34,7 @@ verzi, kterou přináší telefonní CXR-L klient.
 - Android SDK Platform 36;
 - Android telefon s Androidem 12 / API 31 nebo novějším;
 - aplikace Hi Rokid přihlášená a spárovaná s brýlemi;
-- Bluetooth a Wi-Fi;
+- Bluetooth pro instalaci a spuštění, Wi-Fi v brýlích pro načítání profilů;
 - USB ladění v telefonu pro instalaci telefonní APK.
 
 Pokud Android SDK není automaticky nalezené, vytvoř v obou projektech lokální,
@@ -101,7 +101,7 @@ Device projekt se tlačítkem Run do telefonu neinstaluje.
 7. Telefon ověří instalaci device APK.
 8. Pokud chybí nebo se změnila její verze, nahraje ji do brýlí.
 9. Telefon device aplikaci spustí a počká na zprávu `ready`.
-10. Po `ready` odešle načtený FAnn profil.
+10. Device aplikace si sama načte profil z FAnn API přes Wi-Fi brýlí.
 
 Telefonní obrazovka obsahuje také tlačítko pro zastavení device aplikace a
 potvrzované tlačítko pro její odinstalaci. Odinstalace odstraní jen balíček
@@ -128,15 +128,16 @@ Device APK má vlastní balíček a nenahrazuje Hi Rokid ani systémové Rokid
 aplikace. Případný rollback udělej sestavením staršího kódu s novým, vyšším
 `versionCode`; Android běžně blokuje downgrade na nižší číslo verze.
 
-## FAnn CRM API
+## Samostatný provoz a FAnn CRM API
 
-Telefon bez přihlášení načítá produkční ID `11..20` chronologicky a volá například:
+Device aplikace v brýlích bez přihlášení načítá produkční ID `11..20`
+chronologicky a volá například:
 
 ```text
 https://fann-crm.netlify.app/api/admin/profile/11
 ```
 
-První profil je ID `11`. Posun dopředu používá pořadí
+Při prvním spuštění začne ID `11`. Posun dopředu používá pořadí
 `11 → 12 → … → 20 → 11`, posun dozadu opačné pořadí. Do brýlí posílá:
 
 - číslo a název profilu;
@@ -144,29 +145,28 @@ První profil je ID `11`. Posun dopředu používá pořadí
 - první tři prodejní otázky;
 - první dvě námitky.
 
+Neplatné, nepublikované nebo nedostupné ID aplikace přeskočí. Poslední úspěšně
+načtený profil ukládá přímo v brýlích. Po novém otevření jej ihned zobrazí a na
+pozadí se jej pokusí aktualizovat. Při výpadku Wi-Fi zůstane uložený profil
+zobrazený a posun lze po obnovení připojení zopakovat.
+
+Po úspěšné instalaci a prvním spuštění už telefon není pro zobrazování ani
+listování profilů potřeba. Brýle ale musí mít přístup k Wi-Fi.
+
 ## Komunikační protokol
 
 ```text
-cz.suku.rokidglass.profile
-    telefon -> brýle, JSON profilu v Caps
-
 cz.suku.rokidglass.event
-    brýle -> telefon, hodnota ready, next_profile nebo previous_profile
+    brýle -> telefon, diagnostická hodnota ready nebo stav přímého API
 ```
 
-`ready` zabraňuje tomu, aby telefon odeslal první profil dřív, než device
-aplikace skutečně naslouchá. Posun jedním prstem i podporovaný dvouprstý posun
-dopředu vyšle `next_profile`, posun dozadu `previous_profile`. Dvojklik ukončí
-Activity device aplikace a vrátí systémové hlavní menu brýlí.
+`ready` potvrzuje telefonu, že device aplikace běží. Profil ani příkazy pro
+listování se přes telefon neposílají. Posun zpracuje device aplikace přímo a
+dvojklik ukončí její Activity a vrátí systémové hlavní menu brýlí.
 
-Při návratu z hlavního menu telefon znovu odešle poslední profil. Device aplikace
-má současně jeho lokální kopii, takže místo textu „Čekám na profil z telefonu“
-okamžitě obnoví poslední zobrazený profil.
-
-Telefon používá foreground service s trvalým oznámením. Díky tomu CXR spojení a
-načítání profilů pokračuje i po odebrání obrazovky aplikace z posledních aplikací.
-Systémové „Vynutit ukončení“ nebo tlačítko Stop u aktivní služby ukončí celý
-proces; potom je nutné telefonní aplikaci znovu otevřít.
+Telefon používá foreground service s trvalým oznámením pouze pro správu CXR
+spojení. Ukončení telefonní aplikace nemá vliv na načítání ani listování profilů
+v již nainstalované device aplikaci.
 
 ## Diagnostika
 

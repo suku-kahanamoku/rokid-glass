@@ -1,19 +1,16 @@
 <resources>
+    <string name="glasses_direct_api_ok">Brýle se připojily k API přímo přes %1$s.</string>
+    <string name="glasses_direct_api_failed">Brýle se k API přímo nepřipojily.</string>
     <string name="background_channel_name">Spojení s brýlemi Rokid</string>
     <string name="background_notification_title">Rokid Glass je připojený</string>
-    <string name="background_notification_text">Profily lze ovládat z dotykové plochy brýlí.</string>
+    <string name="background_notification_text">Připojení slouží ke správě aplikace v brýlích.</string>
     <string name="app_name">Rokid Glass</string>
     <string name="rokid_disconnected">Rokid: disconnected</string>
     <string name="connect_rokid">Nainstalovat/spustit aplikaci v brýlích</string>
-    <string name="load_next_profile">Načíst další profil</string>
     <string name="stop_device_app">Zastavit aplikaci v brýlích</string>
     <string name="uninstall_device_app">Odinstalovat aplikaci z brýlí</string>
     <string name="uninstall_device_app_confirmation">Opravdu chceš odstranit pouze naši aplikaci FAnn profily z brýlí?</string>
     <string name="uninstall_confirm">Odinstalovat</string>
-    <string name="profile_loading">Načítám profil z FAnn CRM…</string>
-    <string name="glasses_next_profile">Posun dopředu: načítám další profil…</string>
-    <string name="glasses_previous_profile">Posun dozadu: načítám předchozí profil…</string>
-    <string name="profile_loading_failed">Profil se nepodařilo načíst: %1$s</string>
     <string name="unknown_error">neznámá chyba</string>
     <string name="rokid_authorizing">Čekám na autorizaci v Hi Rokid…</string>
     <string name="rokid_connecting">Připojuji se k brýlím…</string>
@@ -34,6 +31,5 @@
     <string name="rokid_uninstalling_device_app">Odinstalovávám naši aplikaci z brýlí…</string>
     <string name="rokid_device_app_uninstalled">Naše aplikace byla z brýlí odstraněna.</string>
     <string name="rokid_sending">Posílám profil do brýlí…</string>
-    <string name="rokid_opened">Profil běží v brýlích. Posunem listuješ, dvojklikem zavřeš.</string>
-    <string name="rokid_send_failed">Odeslání profilu do brýlí selhalo (kód %1$d).</string>
+    <string name="rokid_opened">Aplikace běží samostatně v brýlích. Posunem listuješ, dvojklikem zavřeš.</string>
 </resources>
