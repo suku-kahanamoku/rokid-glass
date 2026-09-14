@@ -1,9 +1,18 @@
 <resources>
+    <string name="background_channel_name">Spojení s brýlemi Rokid</string>
+    <string name="background_notification_title">Rokid Glass je připojený</string>
+    <string name="background_notification_text">Profily lze ovládat z dotykové plochy brýlí.</string>
     <string name="app_name">Rokid Glass</string>
     <string name="rokid_disconnected">Rokid: disconnected</string>
-    <string name="connect_rokid">Zobrazit náhodný profil v brýlích</string>
-    <string name="profile_loading">Načítám náhodný profil z FAnn CRM…</string>
-    <string name="glasses_profile_gesture">Dotyk na brýlích: načítám další profil…</string>
+    <string name="connect_rokid">Nainstalovat/spustit aplikaci v brýlích</string>
+    <string name="load_next_profile">Načíst další profil</string>
+    <string name="stop_device_app">Zastavit aplikaci v brýlích</string>
+    <string name="uninstall_device_app">Odinstalovat aplikaci z brýlí</string>
+    <string name="uninstall_device_app_confirmation">Opravdu chceš odstranit pouze naši aplikaci FAnn profily z brýlí?</string>
+    <string name="uninstall_confirm">Odinstalovat</string>
+    <string name="profile_loading">Načítám profil z FAnn CRM…</string>
+    <string name="glasses_next_profile">Posun dopředu: načítám další profil…</string>
+    <string name="glasses_previous_profile">Posun dozadu: načítám předchozí profil…</string>
     <string name="profile_loading_failed">Profil se nepodařilo načíst: %1$s</string>
     <string name="unknown_error">neznámá chyba</string>
     <string name="rokid_authorizing">Čekám na autorizaci v Hi Rokid…</string>
@@ -13,8 +22,18 @@
     <string name="rokid_auth_failed">Autorizace přes Hi Rokid selhala.</string>
     <string name="rokid_connection_failed">Spojení s brýlemi selhalo.</string>
     <string name="rokid_bluetooth_waiting">CXR je připojené, čekám na Bluetooth brýlí…</string>
+    <string name="rokid_checking_device_app">Kontroluji aplikaci v brýlích…</string>
+    <string name="rokid_installing_device_app">Nahrávám a instaluji aplikaci do brýlí…</string>
+    <string name="rokid_device_app_install_failed">Instalace aplikace do brýlí selhala: %1$s</string>
+    <string name="rokid_starting_device_app">Spouštím aplikaci přímo v brýlích…</string>
+    <string name="rokid_waiting_device_app">Aplikace běží, čekám na její spojení…</string>
+    <string name="rokid_device_app_start_failed">Aplikaci v brýlích se nepodařilo spustit.</string>
+    <string name="rokid_stopping_device_app">Zastavuji aplikaci v brýlích…</string>
+    <string name="rokid_device_app_stopped">Aplikace v brýlích byla zastavena.</string>
+    <string name="rokid_device_app_closed">Aplikace v brýlích je zavřená. Tlačítkem ji znovu spustíš.</string>
+    <string name="rokid_uninstalling_device_app">Odinstalovávám naši aplikaci z brýlí…</string>
+    <string name="rokid_device_app_uninstalled">Naše aplikace byla z brýlí odstraněna.</string>
     <string name="rokid_sending">Posílám profil do brýlí…</string>
-    <string name="rokid_opened">Profil je zobrazený. Kliknutím načteš další.</string>
-    <string name="rokid_view_closed">Zobrazení v brýlích bylo zavřeno.</string>
-    <string name="rokid_view_error">Chyba zobrazení v brýlích: %1$d – %2$s</string>
+    <string name="rokid_opened">Profil běží v brýlích. Posunem listuješ, dvojklikem zavřeš.</string>
+    <string name="rokid_send_failed">Odeslání profilu do brýlí selhalo (kód %1$d).</string>
 </resources>

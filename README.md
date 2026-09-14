@@ -1,268 +1,192 @@
 # Rokid Glass
 
-Android aplikace v Kotlinu, která přes oficiální CXR-L SDK a aplikaci Hi Rokid
-zobrazuje vlastní `CUSTOMVIEW` v consumer Rokid Glasses.
-
-Po stisknutí tlačítka **Zobrazit náhodný profil v brýlích** aplikace načte
-profil z ostrého FAnn CRM API a zobrazí jej jako kartu v brýlích. Dalším
-stisknutím nebo klepnutím na dotykovou plochu brýlí načte jiný náhodný profil.
-
-## Jak spojení funguje
+Dvojice Android aplikací, která zobrazuje profily z FAnn CRM přímo v consumer
+Rokid Glasses.
 
 ```text
-Rokid Glass aplikace v telefonu
-        ↓ CXR-L
-     Hi Rokid
-        ↓ Bluetooth / Wi-Fi
-  displej Rokid Glasses
+rokid-glass (telefon)
+  -> Hi Rokid / CXR-L CUSTOMAPP
+  -> rokid-glass-device (aplikace v brýlích)
 ```
 
-Naše APK běží v telefonu. Neinstaluje se přímo do brýlí. Hi Rokid slouží jako
-komunikační prostředník a předává do brýlí popis obrazovky `CUSTOMVIEW`.
+Telefon stahuje profil z FAnn API, instaluje a spouští device APK v brýlích a
+posílá jí profil. Device aplikace profil vykreslí, posunem dopředu nebo dozadu
+listuje profily a dvojklikem se zavře do hlavního menu brýlí.
 
-USB kabel je potřeba pouze pro instalaci a ladění aplikace v telefonu. Po
-instalaci může telefon komunikovat s brýlemi bez připojení k počítači.
+## Projekty
+
+```text
+/home/suku/Workspace/rokid-glass
+/home/suku/Workspace/rokid-glass-device
+```
+
+- `rokid-glass`: telefonní aplikace, balíček `cz.suku.rokidglass`;
+- `rokid-glass-device`: aplikace v brýlích, balíček
+  `cz.suku.rokidglass.device`.
+
+Telefon používá `com.rokid.cxr:client-l:1.1.1`. Device aplikace používá
+`com.rokid.cxr:cxr-service-bridge:1.0-20260715.121510-107`, tedy stejnou bridge
+verzi, kterou přináší telefonní CXR-L klient.
 
 ## Požadavky
 
-- JDK 17 nebo novější
-- Android SDK Platform 36
-- Android SDK Build Tools a Platform-Tools
-- Android telefon s Androidem 12 / API 31 nebo novějším
-- nainstalovaná a přihlášená aplikace Hi Rokid
-- brýle spárované v Hi Rokid
-- zapnuté Bluetooth a Wi-Fi
-- pro ladění přes kabel zapnuté **Ladění USB**
+- JDK 17;
+- Android SDK Platform 36;
+- Android telefon s Androidem 12 / API 31 nebo novějším;
+- aplikace Hi Rokid přihlášená a spárovaná s brýlemi;
+- Bluetooth a Wi-Fi;
+- USB ladění v telefonu pro instalaci telefonní APK.
 
-Pokud Android SDK není automaticky nalezené, vytvoř lokální a neverzovaný
-soubor `local.properties`:
+Pokud Android SDK není automaticky nalezené, vytvoř v obou projektech lokální,
+neverzovaný `local.properties`:
 
 ```properties
 sdk.dir=/home/suku/Android/Sdk
 ```
 
-## Co je v projektu nastavené
+## Sestavení obou aplikací
 
-V `settings.gradle.kts` je přidaný veřejný Rokid Maven repozitář:
-
-```kotlin
-maven {
-    url = uri("https://maven.rokid.com/repository/maven-public/")
-}
-```
-
-V `app/build.gradle.kts` je nastavené API 31 jako minimum a CXR-L SDK:
-
-```kotlin
-minSdk = 31
-```
-
-```kotlin
-implementation("com.rokid.cxr:client-l:1.1.1")
-```
-
-V `app/src/main/AndroidManifest.xml` je internetové oprávnění a deklarace,
-které umožňují najít globální i čínskou variantu Rokid aplikace a její
-autorizační a mediální službu.
-
-Hlavní integrace je v
-`app/src/main/java/cz/suku/rokidglass/MainActivity.kt`:
-
-1. vytvoří jeden `CXRLink`;
-2. nastaví relaci `CXRSessionType.CUSTOMVIEW`;
-3. ověří, že je nainstalovaná podporovaná aplikace Hi Rokid;
-4. požádá přes Hi Rokid o autorizaci `DEVICE_MANAGE`;
-5. převezme autorizační token;
-6. zavolá `cxrLink.connect(token)`;
-7. počká současně na CXR spojení a Bluetooth spojení s brýlemi;
-8. načte jeden náhodně vybraný profil z ostrého FAnn CRM API;
-9. vybere náhodný vyplněný profil a zavolá `customViewOpen(...)` s jeho JSON
-   obrazovkou;
-10. při dalším stisknutí pošle do `customViewUpdate(...)` inkrementální změny
-    uzlů ve formátu `action`, `id` a `props` pro jiný profil;
-11. při klepnutí na dotykovou plochu přijme `onCustomViewClosed()` a při
-    aktivním spojení načte jiný profil a pohled znovu otevře;
-12. zpracuje otevření, aktualizaci, zavření a případnou chybu pohledu.
-
-Profil se neposílá, dokud nejsou připravené obě části spojení:
-
-```kotlin
-if (!cxrConnected || !glassesConnected || viewRequested) return
-```
-
-## Nejsnazší spuštění přes Android Studio
-
-1. Zapni Bluetooth a Wi-Fi v telefonu.
-2. Otevři Hi Rokid a ověř, že jsou brýle připojené.
-3. Rozlož a nasaď si brýle; jejich displej musí být aktivní.
-4. Připoj telefon k počítači datovým USB kabelem.
-5. V Android Studiu vyber připojený telefon.
-6. Klikni na zelené **Run ▶**.
-7. V aplikaci v telefonu klikni na **Zobrazit náhodný profil v brýlích**.
-8. Při prvním spuštění potvrď autorizaci v Hi Rokid.
-9. Počkej na stav **Profil je zobrazený. Kliknutím načteš další.**
-
-Android Studio automaticky aplikaci sestaví, nainstaluje do telefonu a spustí.
-
-## Spuštění přes terminál
-
-Přejdi do projektu a ověř telefon:
+Nejdříve sestav device APK a vlož ji do assets telefonu:
 
 ```bash
 cd /home/suku/Workspace/rokid-glass
-adb devices
+./scripts/embed-device-apk.sh
 ```
 
-Telefon musí mít stav `device`, například:
+Skript provede kontrolu a sestavení projektu `../rokid-glass-device` a vytvoří:
 
 ```text
-HZQL1838HAL22301864    device
+rokid-glass-device/app/build/outputs/apk/debug/app-debug.apk
+rokid-glass/app/src/main/assets/rokid-glass-device.apk
 ```
 
-Sestav a staticky zkontroluj debug verzi:
+Potom sestav telefonní aplikaci:
 
 ```bash
 ./gradlew lintDebug assembleDebug
 ```
 
-Výsledné APK vznikne zde:
+Telefonní APK vznikne zde:
 
 ```text
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Nainstaluj nebo aktualizuj aplikaci v telefonu:
+## Instalace telefonní aplikace
+
+Připoj telefon datovým USB kabelem a ověř jej:
 
 ```bash
-adb -s HZQL1838HAL22301864 install -r \
-  app/build/outputs/apk/debug/app-debug.apk
+adb devices
 ```
 
-Spusť aplikaci:
+Potom aplikaci nainstaluj:
 
 ```bash
-adb -s HZQL1838HAL22301864 shell am start \
-  -n cz.suku.rokidglass/.MainActivity
-```
-
-Sestavení a instalaci lze provést také jedním příkazem:
-
-```bash
+cd /home/suku/Workspace/rokid-glass
 ANDROID_SERIAL=HZQL1838HAL22301864 ./gradlew installDebug
 ```
 
-Sériové číslo nahraď hodnotou, kterou na tvém počítači vypíše `adb devices`.
+Nebo otevři `rokid-glass` v Android Studiu, vyber telefon a klikni na **Run**.
+Device projekt se tlačítkem Run do telefonu neinstaluje.
+
+## První spuštění
+
+1. Zapni Bluetooth a Wi-Fi.
+2. V Hi Rokid ověř připojené brýle.
+3. Nasaď si brýle a ověř aktivní displej.
+4. Spusť `Rokid Glass` v telefonu.
+5. Klepni na **Nainstalovat/spustit aplikaci v brýlích**.
+6. Při prvním spuštění potvrď oprávnění `DEVICE_MANAGE` v Hi Rokid.
+7. Telefon ověří instalaci device APK.
+8. Pokud chybí nebo se změnila její verze, nahraje ji do brýlí.
+9. Telefon device aplikaci spustí a počká na zprávu `ready`.
+10. Po `ready` odešle načtený FAnn profil.
+
+Telefonní obrazovka obsahuje také tlačítko pro zastavení device aplikace a
+potvrzované tlačítko pro její odinstalaci. Odinstalace odstraní jen balíček
+`cz.suku.rokidglass.device`, nikoliv Hi Rokid ani systémové aplikace.
+
+Instalace do brýlí tedy probíhá přes telefon, Hi Rokid a
+`appUploadAndInstall()`. USB kabel vede pouze mezi Linuxem a telefonem.
+
+## Aktualizace device aplikace
+
+Po změně projektu `rokid-glass-device`:
+
+1. zvyš `versionCode` v `rokid-glass-device/app/build.gradle.kts`;
+2. spusť `./scripts/embed-device-apk.sh` v telefonním projektu;
+3. znovu sestav a nainstaluj telefonní aplikaci;
+4. spusť ji a klepni na hlavní tlačítko.
+
+Telefon porovná verzi vložené APK s naposledy úspěšně nahranou verzí. Novou
+verzi automaticky pošle do brýlí. Pro debug sestavení musí zůstat stejný debug
+podpis; pro produkci musí všechny device APK používat stále stejný release
+keystore.
+
+Device APK má vlastní balíček a nenahrazuje Hi Rokid ani systémové Rokid
+aplikace. Případný rollback udělej sestavením staršího kódu s novým, vyšším
+`versionCode`; Android běžně blokuje downgrade na nižší číslo verze.
 
 ## FAnn CRM API
 
-Aplikace bez přihlášení náhodně vybere jedno z produkčních ID `11..20` a volá
-detail profilu, například:
+Telefon bez přihlášení načítá produkční ID `11..20` chronologicky a volá například:
 
 ```text
 https://fann-crm.netlify.app/api/admin/profile/11
 ```
 
-Veřejný seznam `/api/admin/profile?limit=100` vyžaduje přihlášení, ale jednotlivé
-detaily profilů jsou dostupné bez přihlášení. Produkční detaily `11` až `20`
-byly ověřené s odpovědí HTTP 200. Při změně aplikace nikdy bezprostředně
-nevybere stejné ID jako naposledy.
+První profil je ID `11`. Posun dopředu používá pořadí
+`11 → 12 → … → 20 → 11`, posun dozadu opačné pořadí. Do brýlí posílá:
 
-Adresa endpointu je v
-`app/src/main/java/cz/suku/rokidglass/MainActivity.kt` v konstantě:
-
-```kotlin
-const val PROFILE_URL = "https://fann-crm.netlify.app/api/admin/profile"
-val FANN_PROFILE_IDS = 11..20
-```
-
-Vzhled karty vytváří metoda `createProfileView()`. Zobrazuje podle dostupnosti:
-
-- číslo a název prodejního profilu;
+- číslo a název profilu;
 - potřebu zákazníka;
-- až tři doporučené prodejní otázky;
-- první dvě typické námitky.
+- první tři prodejní otázky;
+- první dvě námitky.
 
-Texty jsou zkrácené na délku vhodnou pro malý displej brýlí. JSON se vytváří
-přes `JSONObject`, takže uvozovky a další znaky z API nemohou poškodit popis
-`CUSTOMVIEW`.
+## Komunikační protokol
 
-Pro rychlé ověření dostupnosti API z Linuxu:
+```text
+cz.suku.rokidglass.profile
+    telefon -> brýle, JSON profilu v Caps
 
-```bash
-curl -fsSL \
-  'https://fann-crm.netlify.app/api/admin/profile/11'
+cz.suku.rokidglass.event
+    brýle -> telefon, hodnota ready, next_profile nebo previous_profile
 ```
 
-## Stavové callbacky
+`ready` zabraňuje tomu, aby telefon odeslal první profil dřív, než device
+aplikace skutečně naslouchá. Posun jedním prstem i podporovaný dvouprstý posun
+dopředu vyšle `next_profile`, posun dozadu `previous_profile`. Dvojklik ukončí
+Activity device aplikace a vrátí systémové hlavní menu brýlí.
 
-- `onCXRLConnected()` oznamuje spojení s CXR službou.
-- `onGlassBtConnected()` oznamuje Bluetooth spojení s brýlemi.
-- `onCustomViewOpened()` potvrzuje zobrazení pohledu.
-- `onCustomViewClosed()` oznamuje, že brýle pohled zavřely.
-- `onCustomViewError()` vrací chybu vykreslení nebo přenosu.
+Při návratu z hlavního menu telefon znovu odešle poslední profil. Device aplikace
+má současně jeho lokální kopii, takže místo textu „Čekám na profil z telefonu“
+okamžitě obnoví poslední zobrazený profil.
 
-Po úspěšném otevření se tlačítko znovu povolí. Další stisknutí vybere jiné ID,
-stáhne detail profilu a aktualizuje už otevřený pohled přes `customViewUpdate()`.
-Aktualizace neposílá celý strom obrazovky, ale pole změn jednotlivých textových
-uzlů. Všechny uzly proto existují už v prvním pohledu, i když je některá
-hodnota profilu prázdná.
-
-### Změna profilu z brýlí
-
-Když je profil zobrazený, klepni na pravou dotykovou plochu. Na testovaných
-brýlích se neposílá obecná událost kliknutí ani `onGlassAiAssistStart()`.
-Brýle místo toho skryjí aktuální `CUSTOMVIEW` a pošlou
-`onCustomViewClosed()`. Hi Rokid přitom může pohled ještě krátce považovat za
-otevřený. Aplikace proto provede explicitní `customViewClose()`, kontroluje
-`customViewIsOpen()` a nový profil otevře až po potvrzení zavřeného stavu.
-
-Stav `onGlassWearingStatus()` se pro rozpoznání klepnutí nepoužívá, protože
-fyzický test ukázal, že SDK může krátce oznámit `false`, i když uživatel s
-brýlemi právě pracuje. Rozhodující je aktivní CXR a Bluetooth spojení.
+Telefon používá foreground service s trvalým oznámením. Díky tomu CXR spojení a
+načítání profilů pokračuje i po odebrání obrazovky aplikace z posledních aplikací.
+Systémové „Vynutit ukončení“ nebo tlačítko Stop u aktivní služby ukončí celý
+proces; potom je nutné telefonní aplikaci znovu otevřít.
 
 ## Diagnostika
 
-Bezpečně filtrované CXR-L logy:
+Bezpečně filtrované logy telefonu:
 
 ```bash
 adb -s HZQL1838HAL22301864 logcat -v time \
   | rg -v -i 'token' \
-  | rg 'CXRLink|Custom_View|CXRLinkService'
+  | rg 'CXR|CustomApp|rokidglass'
 ```
 
-Filtr odstraňující řádky s `token` je důležitý. Rokid SDK může do Logcatu
-vypsat dočasný autorizační token, proto neupravené logy veřejně nesdílej.
+Řádky obsahující token nesdílej. CXR-L může do Logcatu vypsat dočasný
+autorizační token.
 
-### Telefon není v ADB
+## Co lze ověřit bez fyzických brýlí
 
-Pokud `adb devices` nic nevypíše:
+- kompilaci obou projektů;
+- Android lint;
+- zabalení device APK uvnitř telefonní APK;
+- identitu, verzi a podpis APK.
 
-1. odemkni telefon;
-2. nastav USB režim **Přenos souborů**;
-3. ověř, že je zapnuté **Ladění USB**;
-4. potvrď dialog **Povolit ladění USB**;
-5. zkus znovu `adb devices`.
-
-Stav `unauthorized` znamená, že ještě nebyl potvrzen dialog v telefonu.
-
-### Pohled se ihned zavře
-
-Brýle mohou poslat `Custom_View_Closed`, pokud je detekce nošení vyhodnotí
-jako nenasazené. Rozlož je, nasaď si je a ověř aktivní displej. Pokud problém
-pokračuje, lze v Hi Rokid dočasně vypnout **Settings → Device → Wear
-Detection** a test zopakovat.
-
-## Ověřený stav
-
-- sestavení `assembleDebug`: úspěšné
-- kontrola `lintDebug`: úspěšná
-- instalace přes ADB na Nokia 3.4 s Androidem 12: úspěšná
-- autorizace přes globální Hi Rokid: úspěšná
-- fyzické zobrazení původního `Hello world Rokid!` v brýlích: úspěšně ověřené
-- FAnn detail API pro profily 11 až 20: úspěšně ověřené
-- sestavení a lint nové profilové verze: úspěšné
-- fyzické zobrazení původní Zoo profilové karty: úspěšně ověřené
-- fyzické zobrazení nové FAnn profilové karty: čeká na test
-- přepnutí na jiný profil druhým kliknutím v telefonu: úspěšně ověřené
-- tok dotykové plochy `Closed → close → open → Opened`: úspěšně ověřený v
-  CXR-L logu na fyzických brýlích
+Instalaci přes `appUploadAndInstall()`, spuštění přes `appStart()`, vykreslení a
+přesně jedno fyzické klepnutí lze potvrdit až s připojeným telefonem a brýlemi.
