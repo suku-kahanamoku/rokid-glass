@@ -2,7 +2,8 @@
     <string name="app_name">Rokid Glass</string>
     <string name="rokid_disconnected">Rokid: disconnected</string>
     <string name="connect_rokid">Zobrazit náhodný profil v brýlích</string>
-    <string name="profile_loading">Načítám náhodný profil ze Zoo CRM…</string>
+    <string name="profile_loading">Načítám náhodný profil z FAnn CRM…</string>
+    <string name="glasses_profile_gesture">Dotyk na brýlích: načítám další profil…</string>
     <string name="profile_loading_failed">Profil se nepodařilo načíst: %1$s</string>
     <string name="unknown_error">neznámá chyba</string>
     <string name="rokid_authorizing">Čekám na autorizaci v Hi Rokid…</string>

@@ -4,8 +4,8 @@ Android aplikace v Kotlinu, která přes oficiální CXR-L SDK a aplikaci Hi Rok
 zobrazuje vlastní `CUSTOMVIEW` v consumer Rokid Glasses.
 
 Po stisknutí tlačítka **Zobrazit náhodný profil v brýlích** aplikace načte
-profil z ostrého Zoo CRM API a zobrazí jej jako kartu v brýlích. Dalším
-stisknutím načte jiný náhodný profil.
+profil z ostrého FAnn CRM API a zobrazí jej jako kartu v brýlích. Dalším
+stisknutím nebo klepnutím na dotykovou plochu brýlí načte jiný náhodný profil.
 
 ## Jak spojení funguje
 
@@ -75,12 +75,14 @@ Hlavní integrace je v
 5. převezme autorizační token;
 6. zavolá `cxrLink.connect(token)`;
 7. počká současně na CXR spojení a Bluetooth spojení s brýlemi;
-8. načte profily z ostrého Zoo CRM API;
+8. načte jeden náhodně vybraný profil z ostrého FAnn CRM API;
 9. vybere náhodný vyplněný profil a zavolá `customViewOpen(...)` s jeho JSON
    obrazovkou;
 10. při dalším stisknutí pošle do `customViewUpdate(...)` inkrementální změny
     uzlů ve formátu `action`, `id` a `props` pro jiný profil;
-11. zpracuje otevření, aktualizaci, zavření a případnou chybu pohledu.
+11. při klepnutí na dotykovou plochu přijme `onCustomViewClosed()` a při
+    aktivním spojení načte jiný profil a pohled znovu otevře;
+12. zpracuje otevření, aktualizaci, zavření a případnou chybu pohledu.
 
 Profil se neposílá, dokud nejsou připravené obě části spojení:
 
@@ -151,31 +153,34 @@ ANDROID_SERIAL=HZQL1838HAL22301864 ./gradlew installDebug
 
 Sériové číslo nahraď hodnotou, kterou na tvém počítači vypíše `adb devices`.
 
-## Zoo CRM API
+## FAnn CRM API
 
-Aplikace bez přihlášení volá:
+Aplikace bez přihlášení náhodně vybere jedno z produkčních ID `11..20` a volá
+detail profilu, například:
 
 ```text
-https://zoo-crm.netlify.app/api/admin/client?limit=100&projection=first_name,last_name,profile,client_type
+https://fann-crm.netlify.app/api/admin/profile/11
 ```
 
-Parametr `projection` záměrně omezuje data. Do telefonu ani brýlí se nestahuje
-e-mail, telefon nebo heslo. Z odpovědi se vybírají jen záznamy s vyplněným
-objektem `profile`.
+Veřejný seznam `/api/admin/profile?limit=100` vyžaduje přihlášení, ale jednotlivé
+detaily profilů jsou dostupné bez přihlášení. Produkční detaily `11` až `20`
+byly ověřené s odpovědí HTTP 200. Při změně aplikace nikdy bezprostředně
+nevybere stejné ID jako naposledy.
 
 Adresa endpointu je v
 `app/src/main/java/cz/suku/rokidglass/MainActivity.kt` v konstantě:
 
 ```kotlin
-const val PROFILES_URL = "https://zoo-crm.netlify.app/api/admin/client..."
+const val PROFILE_URL = "https://fann-crm.netlify.app/api/admin/profile"
+val FANN_PROFILE_IDS = 11..20
 ```
 
 Vzhled karty vytváří metoda `createProfileView()`. Zobrazuje podle dostupnosti:
 
-- jméno a typ klienta;
-- shrnutí, auru a chování;
-- oblíbená zvířata;
-- obchodní potenciál.
+- číslo a název prodejního profilu;
+- potřebu zákazníka;
+- až tři doporučené prodejní otázky;
+- první dvě typické námitky.
 
 Texty jsou zkrácené na délku vhodnou pro malý displej brýlí. JSON se vytváří
 přes `JSONObject`, takže uvozovky a další znaky z API nemohou poškodit popis
@@ -185,7 +190,7 @@ Pro rychlé ověření dostupnosti API z Linuxu:
 
 ```bash
 curl -fsSL \
-  'https://zoo-crm.netlify.app/api/admin/client?limit=1&projection=first_name,last_name,profile,client_type'
+  'https://fann-crm.netlify.app/api/admin/profile/11'
 ```
 
 ## Stavové callbacky
@@ -196,11 +201,24 @@ curl -fsSL \
 - `onCustomViewClosed()` oznamuje, že brýle pohled zavřely.
 - `onCustomViewError()` vrací chybu vykreslení nebo přenosu.
 
-Po úspěšném otevření se tlačítko znovu povolí. Další stisknutí stáhne seznam,
-vybere jiný profil a aktualizuje už otevřený pohled přes `customViewUpdate()`.
+Po úspěšném otevření se tlačítko znovu povolí. Další stisknutí vybere jiné ID,
+stáhne detail profilu a aktualizuje už otevřený pohled přes `customViewUpdate()`.
 Aktualizace neposílá celý strom obrazovky, ale pole změn jednotlivých textových
 uzlů. Všechny uzly proto existují už v prvním pohledu, i když je některá
 hodnota profilu prázdná.
+
+### Změna profilu z brýlí
+
+Když je profil zobrazený, klepni na pravou dotykovou plochu. Na testovaných
+brýlích se neposílá obecná událost kliknutí ani `onGlassAiAssistStart()`.
+Brýle místo toho skryjí aktuální `CUSTOMVIEW` a pošlou
+`onCustomViewClosed()`. Hi Rokid přitom může pohled ještě krátce považovat za
+otevřený. Aplikace proto provede explicitní `customViewClose()`, kontroluje
+`customViewIsOpen()` a nový profil otevře až po potvrzení zavřeného stavu.
+
+Stav `onGlassWearingStatus()` se pro rozpoznání klepnutí nepoužívá, protože
+fyzický test ukázal, že SDK může krátce oznámit `false`, i když uživatel s
+brýlemi právě pracuje. Rozhodující je aktivní CXR a Bluetooth spojení.
 
 ## Diagnostika
 
@@ -241,7 +259,10 @@ Detection** a test zopakovat.
 - instalace přes ADB na Nokia 3.4 s Androidem 12: úspěšná
 - autorizace přes globální Hi Rokid: úspěšná
 - fyzické zobrazení původního `Hello world Rokid!` v brýlích: úspěšně ověřené
-- Zoo API odpověď a dostupnost profilů: úspěšně ověřené
+- FAnn detail API pro profily 11 až 20: úspěšně ověřené
 - sestavení a lint nové profilové verze: úspěšné
-- fyzické zobrazení první Zoo profilové karty: úspěšně ověřené
-- přepnutí na jiný profil druhým kliknutím: čeká na fyzický test nové verze
+- fyzické zobrazení původní Zoo profilové karty: úspěšně ověřené
+- fyzické zobrazení nové FAnn profilové karty: čeká na test
+- přepnutí na jiný profil druhým kliknutím v telefonu: úspěšně ověřené
+- tok dotykové plochy `Closed → close → open → Opened`: úspěšně ověřený v
+  CXR-L logu na fyzických brýlích

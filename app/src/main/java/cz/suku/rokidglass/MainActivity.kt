@@ -32,9 +32,11 @@ class MainActivity : AppCompatActivity() {
     private var pendingProfileView: String? = null
     private var pendingProfileUpdate: String? = null
     private var lastProfileId: Int? = null
+    @Volatile private var profileLoading = false
+    private var touchResetInProgress = false
     private val ioExecutor = Executors.newSingleThreadExecutor()
 
-    private val cxrLink by lazy {
+    private val cxrLink: CXRLink by lazy {
         CXRLink(applicationContext).apply {
             configCXRSession(
                 CxrDefs.CXRSession(CxrDefs.CXRSessionType.CUSTOMVIEW),
@@ -73,6 +75,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadRandomProfile() {
+        if (profileLoading) return
+        profileLoading = true
         showStatus(getString(R.string.profile_loading), enableButton = false)
 
         ioExecutor.execute {
@@ -85,13 +89,19 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
 
-                    if (cxrConnected && glassesConnected && viewRequested) {
-                        updateProfileInGlasses()
+                    if (cxrConnected && glassesConnected) {
+                        if (viewRequested) {
+                            updateProfileInGlasses()
+                        } else {
+                            openProfileWhenReady()
+                        }
                     } else {
                         authorizeAndConnect()
                     }
+                    profileLoading = false
                 }
             } catch (error: Exception) {
+                profileLoading = false
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     showStatus(
@@ -106,8 +116,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun fetchRandomProfile(): ZooProfile {
-        val connection = (URL(PROFILES_URL).openConnection() as HttpURLConnection).apply {
+    private fun fetchRandomProfile(): FannProfile {
+        var lastError: Exception? = null
+        val candidateIds = FANN_PROFILE_IDS
+            .filter { it != lastProfileId }
+            .shuffled()
+
+        for (profileId in candidateIds) {
+            try {
+                return fetchProfile(profileId)
+            } catch (error: Exception) {
+                lastError = error
+            }
+        }
+
+        throw lastError ?: IllegalStateException("FAnn API neobsahuje dostupný profil")
+    }
+
+    private fun fetchProfile(profileId: Int): FannProfile {
+        val connection = (URL("$PROFILE_URL/$profileId").openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = NETWORK_TIMEOUT_MS
             readTimeout = NETWORK_TIMEOUT_MS
@@ -117,58 +144,40 @@ class MainActivity : AppCompatActivity() {
         try {
             val responseCode = connection.responseCode
             if (responseCode !in 200..299) {
-                throw IllegalStateException("Zoo API vrátilo HTTP $responseCode")
+                throw IllegalStateException("FAnn API vrátilo HTTP $responseCode")
             }
 
             val response = connection.inputStream.bufferedReader().use { it.readText() }
             val root = JSONObject(response)
             if (!root.optBoolean("success")) {
-                throw IllegalStateException("Zoo API nevrátilo úspěšnou odpověď")
+                throw IllegalStateException("FAnn API nevrátilo úspěšnou odpověď")
             }
 
-            val data = root.optJSONArray("data")
-                ?: throw IllegalStateException("Zoo API neobsahuje seznam profilů")
-            val profiles = buildList {
-                for (index in 0 until data.length()) {
-                    val item = data.optJSONObject(index) ?: continue
-                    val profile = item.optJSONObject("profile") ?: continue
-                    add(
-                        ZooProfile(
-                            id = item.optInt("id"),
-                            name = listOf(
-                                item.optString("first_name"),
-                                item.optString("last_name"),
-                            ).filter { it.isNotBlank() }.joinToString(" "),
-                            clientType = item.optJSONObject("client_type")
-                                ?.optString("label")
-                                .orEmpty(),
-                            summary = profile.optString("summary"),
-                            aura = profile.optString("aura"),
-                            behavior = profile.optString("behavior"),
-                            businessPotential = profile.optString("business_potential"),
-                            preferredAnimals = profile.optJSONArray("preferred_animals")
-                                ?.let { animals ->
-                                    buildList {
-                                        for (animalIndex in 0 until animals.length()) {
-                                            animals.optString(animalIndex)
-                                                .takeIf { it.isNotBlank() }
-                                                ?.let(::add)
-                                        }
-                                    }
-                                }
-                                .orEmpty(),
-                        ),
-                    )
+            val data = root.optJSONObject("data")
+                ?: throw IllegalStateException("FAnn API neobsahuje profil")
+            if (data.optInt("published", 1) != 1) {
+                throw IllegalStateException("FAnn profil není publikovaný")
+            }
+
+            fun stringList(name: String): List<String> {
+                val values = data.optJSONArray(name) ?: return emptyList()
+                return buildList {
+                    for (index in 0 until values.length()) {
+                        values.optString(index)
+                            .takeIf { it.isNotBlank() }
+                            ?.let(::add)
+                    }
                 }
             }
 
-            if (profiles.isEmpty()) {
-                throw IllegalStateException("Zoo API neobsahuje vyplněné profily")
-            }
-
-            return profiles
-                .filter { profiles.size == 1 || it.id != lastProfileId }
-                .random()
+            return FannProfile(
+                id = data.optInt("id"),
+                profileNumber = data.optInt("profile_number"),
+                name = data.optString("name"),
+                selectionNeed = data.optString("selection_need"),
+                questions = stringList("questions"),
+                objections = stringList("objections"),
+            )
         } finally {
             connection.disconnect()
         }
@@ -260,6 +269,36 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun changeProfileAfterGlassesTouch() {
+        if (touchResetInProgress || profileLoading) return
+
+        touchResetInProgress = true
+        viewRequested = false
+        showStatus(getString(R.string.glasses_profile_gesture), enableButton = false)
+        cxrLink.customViewClose()
+        waitUntilCustomViewIsClosed(attempt = 0)
+    }
+
+    private fun waitUntilCustomViewIsClosed(attempt: Int) {
+        status.postDelayed(
+            {
+                if (isFinishing || isDestroyed) return@postDelayed
+
+                if (!cxrLink.customViewIsOpen()) {
+                    touchResetInProgress = false
+                    loadRandomProfile()
+                } else if (attempt < CUSTOM_VIEW_CLOSE_MAX_ATTEMPTS) {
+                    waitUntilCustomViewIsClosed(attempt + 1)
+                } else {
+                    touchResetInProgress = false
+                    viewRequested = true
+                    loadRandomProfile()
+                }
+            },
+            CUSTOM_VIEW_CLOSE_POLL_MS,
+        )
+    }
+
     private val linkCallback = object : ICXRLinkCbk {
         override fun onCXRLConnected(isConnected: Boolean) {
             cxrConnected = isConnected
@@ -286,6 +325,7 @@ class MainActivity : AppCompatActivity() {
 
         override fun onGlassDeviceInfo(deviceInfo: GlassInfo) = Unit
         override fun onGlassWearingStatus(wearing: Boolean) = Unit
+
         override fun onGlassAiAssistStart() = Unit
         override fun onGlassAiAssistStop() = Unit
         override fun onGlassAiInterrupt(interruptWake: Boolean) = Unit
@@ -302,8 +342,20 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onCustomViewClosed() {
-            viewRequested = false
-            showStatus(getString(R.string.rokid_view_closed), enableButton = true)
+            if (touchResetInProgress) return
+
+            val loadNextProfile =
+                viewRequested &&
+                    cxrConnected &&
+                    glassesConnected &&
+                    !isFinishing &&
+                    !isDestroyed
+            if (loadNextProfile) {
+                changeProfileAfterGlassesTouch()
+            } else {
+                viewRequested = false
+                showStatus(getString(R.string.rokid_view_closed), enableButton = true)
+            }
         }
 
         override fun onCustomViewIconsSent() = Unit
@@ -336,23 +388,22 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         const val AUTH_REQUEST_CODE = 1001
         const val NETWORK_TIMEOUT_MS = 15_000
-        const val PROFILES_URL =
-            "https://zoo-crm.netlify.app/api/admin/client" +
-                "?limit=100&projection=first_name,last_name,profile,client_type"
+        const val CUSTOM_VIEW_CLOSE_POLL_MS = 150L
+        const val CUSTOM_VIEW_CLOSE_MAX_ATTEMPTS = 20
+        const val PROFILE_URL = "https://fann-crm.netlify.app/api/admin/profile"
+        val FANN_PROFILE_IDS = 11..20
     }
 
-    private data class ZooProfile(
+    private data class FannProfile(
         val id: Int,
+        val profileNumber: Int,
         val name: String,
-        val clientType: String,
-        val summary: String,
-        val aura: String,
-        val behavior: String,
-        val businessPotential: String,
-        val preferredAnimals: List<String>,
+        val selectionNeed: String,
+        val questions: List<String>,
+        val objections: List<String>,
     )
 
-    private fun createProfileView(profile: ZooProfile): String {
+    private fun createProfileView(profile: FannProfile): String {
         val children = mutableListOf<JSONObject>()
 
         fun addText(id: String, text: String, size: Int, color: String, bold: Boolean = false) {
@@ -397,7 +448,7 @@ class MainActivity : AppCompatActivity() {
             .toString()
     }
 
-    private fun createProfileUpdate(profile: ZooProfile): String {
+    private fun createProfileUpdate(profile: FannProfile): String {
         val updates = JSONArray()
         profileTexts(profile).forEach { (id, text) ->
             updates.put(
@@ -410,20 +461,29 @@ class MainActivity : AppCompatActivity() {
         return updates.toString()
     }
 
-    private fun profileTexts(profile: ZooProfile): Map<String, String> =
+    private fun profileTexts(profile: FannProfile): Map<String, String> =
         linkedMapOf(
-            "profileLabel" to "NÁHODNÝ PROFIL",
-            "profileName" to cleanText(profile.name.ifBlank { "Zoo klient" }),
-            "clientType" to cleanText(profile.clientType),
-            "summary" to cleanText(profile.summary, 180),
-            "aura" to cleanText(profile.aura, 120),
-            "behavior" to cleanText(profile.behavior, 150),
-            "animals" to profile.preferredAnimals
-                .take(4)
-                .joinToString(", ")
-                .let { if (it.isBlank()) "" else "Oblíbená zvířata: $it" }
-                .let(::cleanText),
-            "potential" to cleanText(profile.businessPotential, 100),
+            "profileLabel" to "FANN PROFIL ${profile.profileNumber}",
+            "profileName" to cleanText(profile.name.ifBlank { "FAnn zákazník" }),
+            "clientType" to "POTŘEBA ZÁKAZNÍKA",
+            "summary" to cleanText(profile.selectionNeed, 180),
+            "aura" to profile.questions.getOrNull(0)
+                .orEmpty()
+                .let { if (it.isBlank()) "" else "1. $it" }
+                .let { cleanText(it, 130) },
+            "behavior" to profile.questions.getOrNull(1)
+                .orEmpty()
+                .let { if (it.isBlank()) "" else "2. $it" }
+                .let { cleanText(it, 130) },
+            "animals" to profile.questions.getOrNull(2)
+                .orEmpty()
+                .let { if (it.isBlank()) "" else "3. $it" }
+                .let { cleanText(it, 130) },
+            "potential" to profile.objections
+                .take(2)
+                .joinToString(" • ")
+                .let { if (it.isBlank()) "" else "Námitky: $it" }
+                .let { cleanText(it, 160) },
         )
 
     private fun cleanText(text: String, maxLength: Int = Int.MAX_VALUE): String =
