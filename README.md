@@ -11,20 +11,23 @@ rokid-glass/
 ├── app/                         telefonní aplikace
 ├── device/                      spustitelná aplikace v brýlích
 └── modules/
+    ├── assistant/               orchestrace relace, přepisu a produktů
+    ├── device-ui/               vykreslení přepisu a produktu v brýlích
     ├── glasses-platform/        obousměrný Rokid protokol a zobrazovací DTO
     ├── products/                telefonní produktové API, modely a cache
     └── transcription/           telefonní přepis a odeslání transkripce
 
 mikrofon brýlí -> CXR-L -> telefonní Vosk -> přepis / API
-boční vstup    -> CXR-L -> telefon           -> náhodný produkt
+boční vstup    -> CXR-L -> telefon           -> výběr / navigace produktu
 displej brýlí  <- CXR-L <- telefon           <- přepis nebo produkt
 ```
 
 Telefon instaluje, aktualizuje a spouští device APK v brýlích a po celou dobu
 zajišťuje veškerou aplikační logiku. Device aplikace pouze předává mikrofonní
-stream a boční vstupy do telefonu a vykresluje data přijatá z telefonu. Kliknutí,
-posun dopředu i posun dozadu odešlou aktuální přepis a vyberou produkt;
-dvojklik aplikaci zavře do hlavního menu brýlí.
+stream a boční vstupy do telefonu a vykresluje data přijatá z telefonu. Při
+poslechu kliknutí nebo posun odešlou aktuální přepis a vyberou produkt. Na
+produktu kliknutí obnoví poslech, posun dopředu zobrazí další a posun dozadu
+předchozí produkt. Dvojklik aplikaci zavře do hlavního menu brýlí.
 
 ## Moduly
 
@@ -35,6 +38,10 @@ dvojklik aplikaci zavře do hlavního menu brýlí.
 - `app`: telefonní aplikace, balíček `cz.suku.rokidglass`;
 - `device`: tenký klient v brýlích, balíček `cz.suku.rokidglass.device`;
   vykresluje přepis nebo produkt a předává boční vstupy telefonu;
+- `modules:assistant`: telefonní orchestrace CXR relace, životního cyklu device
+  aplikace, mikrofonního streamu, přepisu a produktového režimu;
+- `modules:device-ui`: znovupoužitelná prezentace přepisu a produktu pro malý
+  displej brýlí včetně automatického posunu dlouhého textu;
 - `modules:glasses-platform`: obousměrný CXR protokol, `RokidSession`,
   zobrazovací DTO a sjednocení fyzického tlačítka i boční dotykové plochy;
 - `modules:products`: model produktu, parser, veřejné FAnn API, náhodný výběr a
@@ -335,8 +342,10 @@ Po otevření FAnn asistenta:
    `products` vybere jiný náhodný publikovaný produkt;
 8. telefon zastaví mikrofonní stream i přepis a pošle prezentační data produktu
    do brýlí, které je pouze vykreslí;
-9. další kliknutí nebo posun na zobrazeném produktu produkt skryje, vyčistí
-   předchozí přepis a znovu spustí mikrofonní stream a nový přepis.
+9. kliknutí na zobrazeném produktu produkt skryje, vyčistí předchozí přepis a
+   znovu spustí mikrofonní stream a nový přepis;
+10. posun dopředu nebo dozadu na produktu načte další nebo předchozí publikovaný
+    produkt v pořadí vráceném katalogovým API; na konci se pořadí cyklicky zalomí.
 
 Dvojklik aplikaci ukončí. Pro boční dotykovou plochu se zpracovávají
 `KEYCODE_ENTER`, `KEYCODE_DPAD_RIGHT` a `KEYCODE_DPAD_LEFT`. Krátký debounce a
@@ -345,8 +354,8 @@ více produktů.
 
 Asistent má tři interní režimy: `LISTENING`, `LOADING_PRODUCT` a
 `SHOWING_PRODUCT`. V režimu produktu se žádné audio nezpracovává. Jeden boční
-vstup vždy provede pouze jeden přechod: přepis → produkt, nebo produkt → nový
-přepis.
+vstup vždy provede pouze jednu akci: přepis → produkt, produkt → nový přepis,
+nebo produkt → sousední produkt.
 
 V režimu `LISTENING` drží device aktivita displej brýlí zapnutý pomocí
 `FLAG_KEEP_SCREEN_ON`, a to i když zatím nebyla rozpoznána žádná slova. Při
@@ -356,7 +365,7 @@ opět uspat. Ukončení nebo opuštění aplikace příznak také vždy odstran�
 Pokud přepis přeroste výšku displeje, `FannAssistantView` po každé textové
 aktualizaci automaticky posune svůj `ScrollView` na konec. Nejnovější věta tak
 zůstává viditelná. Po vyčištění přepisu nebo zobrazení produktu se obsah vrátí
-na začátek.
+na začátek. Pozadí přepisu i produktu je čistě černé.
 
 Přepis nepoužívá cloudovou rozpoznávací službu ani Rokid AK/SK: Vosk běží
 offline v telefonu. Audio však přes CXR-L putuje z mikrofonu brýlí do telefonu a
@@ -401,8 +410,9 @@ GET https://fann-crm.netlify.app/api/admin/product?limit=100
 GET https://fann-crm.netlify.app/api/admin/product/{id}
 ```
 
-První endpoint poskytne katalog pro náhodný výběr, druhý načte aktuální detail
-vybraného produktu. Aplikace zobrazuje název, SKU, kategorii, cenu s DPH, popis,
+První endpoint poskytne seřazený katalog pro náhodný výběr i navigaci na
+předchozí/další položku, druhý načte aktuální detail vybraného produktu.
+Aplikace zobrazuje název, SKU, kategorii, cenu s DPH, popis,
 charakter, hlavní prodejní argument, vyšší variantu, doplněk a alternativy.
 Nepublikované produkty se nepoužijí a pokud je v katalogu více možností,
 bezprostředně předchozí produkt se znovu nevybere.
@@ -418,19 +428,22 @@ nevolají FAnn API a neuchovávají katalog produktů.
 
 ```text
 cz.suku.rokidglass.event
-    brýle -> telefon: ready, input_submit, input_exit
+    brýle -> telefon: ready, input_submit, input_next, input_previous, input_exit
 
 cz.suku.rokidglass.display
     telefon -> brýle: clear, transcript, product + binární UTF-8 payload
 ```
 
 `ready` potvrzuje telefonu, že device aplikace běží. `input_submit` potvrzuje
-aktuální přepis a `input_exit` zastaví mikrofonní stream. Telefon posílá prázdnou
+aktuální přepis nebo na produktu obnoví poslech. `input_next` a `input_previous`
+při zobrazení produktu mění položku katalogu; při poslechu stejně jako kliknutí
+potvrdí přepis. `input_exit` zastaví mikrofonní stream. Telefon posílá prázdnou
 obrazovku, průběžný přepis nebo serializovaný `DisplayProduct`; brýle neznají API
 model `FannProduct`.
 
-Telefon používá foreground service s trvalým oznámením. `RokidController`, CXR
-relace, Vosk přepis i produktová logika jsou vlastněné touto službou;
+Telefon používá foreground service s trvalým oznámením. Modulární
+`RokidController` z `modules:assistant`, CXR relace, Vosk přepis i produktová
+logika jsou vlastněné touto službou;
 `PhoneActivity` je pouze připojené uživatelské ovládání. Zavření obrazovky nebo
 její odstranění z posledních aplikací proto běžící relaci nepřeruší. Device
 aplikace může zůstat otevřená, ale bez běžící telefonní služby nemá zdroj nového
@@ -453,7 +466,8 @@ celkový počet bytů a délku rozpoznaného textu; nezapisuje zvuk ani samotný
 ## Co lze ověřit bez fyzických brýlí
 
 - kompilaci všech Gradle modulů;
-- jednotkové testy parsování produktového API a prázdného transcript sinku;
+- jednotkové testy parsování produktového API, navigace produktů a prázdného
+  transcript sinku;
 - Android lint;
 - zabalení device APK uvnitř telefonní APK;
 - ověření, že device APK neobsahuje Vosk model ani nativní Vosk knihovnu;

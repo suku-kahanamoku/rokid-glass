@@ -11,9 +11,10 @@ class GlassInputReceiver(
         val input = when (intent?.action) {
             ACTION_BUTTON_CLICK,
             ACTION_LEGACY_BUTTON_CLICK,
-            ACTION_SWIPE_FORWARD,
-            ACTION_SWIPE_BACK,
-            -> GlassInput.SUBMIT_TRANSCRIPT
+            -> GlassInput.PRIMARY_ACTION
+
+            ACTION_SWIPE_FORWARD -> GlassInput.NEXT_PRODUCT
+            ACTION_SWIPE_BACK -> GlassInput.PREVIOUS_PRODUCT
 
             ACTION_BUTTON_DOUBLE_CLICK,
             ACTION_LEGACY_BUTTON_DOUBLE_CLICK,

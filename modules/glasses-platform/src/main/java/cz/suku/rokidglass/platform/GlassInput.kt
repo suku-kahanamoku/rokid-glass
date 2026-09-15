@@ -1,6 +1,8 @@
 package cz.suku.rokidglass.platform
 
 enum class GlassInput {
-    SUBMIT_TRANSCRIPT,
+    PRIMARY_ACTION,
+    NEXT_PRODUCT,
+    PREVIOUS_PRODUCT,
     EXIT_APP,
 }

@@ -52,8 +52,8 @@ android {
         applicationId = "cz.suku.rokidglass.device"
         minSdk = 31
         targetSdk = 36
-        versionCode = 20
-        versionName = "1.19"
+        versionCode = 21
+        versionName = "1.20"
     }
 
     signingConfigs {
@@ -100,4 +100,5 @@ kotlin {
 dependencies {
     implementation("androidx.core:core-ktx:1.10.1")
     implementation(project(":modules:glasses-platform"))
+    implementation(project(":modules:device-ui"))
 }

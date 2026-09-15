@@ -1,6 +1,4 @@
 <resources>
-    <string name="glasses_direct_api_ok">Brýle se připojily k API přímo přes %1$s.</string>
-    <string name="glasses_direct_api_failed">Brýle se k API přímo nepřipojily.</string>
     <string name="background_channel_name">Spojení s brýlemi Rokid</string>
     <string name="background_notification_title">Rokid Glass je připojený</string>
     <string name="background_notification_text">Připojení slouží ke správě aplikace v brýlích.</string>
@@ -11,36 +9,8 @@
     <string name="uninstall_device_app">Odinstalovat aplikaci z brýlí</string>
     <string name="uninstall_device_app_confirmation">Opravdu chceš odstranit pouze naši aplikaci FAnn asistent z brýlí?</string>
     <string name="uninstall_confirm">Odinstalovat</string>
-    <string name="unknown_error">neznámá chyba</string>
     <string name="rokid_authorizing">Čekám na autorizaci v Hi Rokid…</string>
-    <string name="rokid_connecting">Připojuji se k brýlím…</string>
     <string name="rokid_missing_app">Nainstaluj nebo aktualizuj aplikaci Hi Rokid.</string>
     <string name="rokid_auth_cancelled">Autorizace byla zrušena. Zkus to znovu.</string>
     <string name="rokid_auth_failed">Autorizace přes Hi Rokid selhala.</string>
-    <string name="rokid_connection_failed">Spojení s brýlemi selhalo.</string>
-    <string name="rokid_bluetooth_waiting">CXR je připojené, čekám na Bluetooth brýlí…</string>
-    <string name="rokid_checking_device_app">Kontroluji aplikaci v brýlích…</string>
-    <string name="rokid_installing_device_app">Nahrávám a instaluji aplikaci do brýlí…</string>
-    <string name="rokid_device_app_install_failed">Instalace aplikace do brýlí selhala: %1$s</string>
-    <string name="rokid_starting_device_app">Spouštím aplikaci přímo v brýlích…</string>
-    <string name="rokid_waiting_device_app">Aplikace běží, čekám na její spojení…</string>
-    <string name="rokid_transcription_ready">Offline český přepis poslouchá. Mluv do mikrofonu brýlí.</string>
-    <string name="rokid_audio_stream">Mikrofon brýlí posílá audio data.</string>
-    <string name="rokid_audio_signal">Mikrofon brýlí zachytil hlas nebo jiný zvuk.</string>
-    <string name="rokid_audio_no_signal">Mikrofon posílá data, ale zatím v nich není slyšitelný signál.</string>
-    <string name="phone_transcription_ready">Český přepis v telefonu je připravený.</string>
-    <string name="rokid_phone_listening">Telefon poslouchá mikrofon brýlí a převádí řeč na text.</string>
-    <string name="rokid_audio_stopped">Přenos mikrofonu brýlí byl zastaven.</string>
-    <string name="rokid_audio_start_failed">Mikrofonní stream z brýlí se nepodařilo spustit.</string>
-    <string name="rokid_audio_error">Chyba mikrofonního streamu: %1$s</string>
-    <string name="loading_product">Načítám produkt v telefonu…</string>
-    <string name="product_sent_to_glasses">Produkt byl odeslán do brýlí.</string>
-    <string name="rokid_device_app_start_failed">Aplikaci v brýlích se nepodařilo spustit.</string>
-    <string name="rokid_stopping_device_app">Zastavuji aplikaci v brýlích…</string>
-    <string name="rokid_device_app_stopped">Aplikace v brýlích byla zastavena.</string>
-    <string name="rokid_device_app_closed">Aplikace v brýlích je zavřená. Tlačítkem ji znovu spustíš.</string>
-    <string name="rokid_uninstalling_device_app">Odinstalovávám naši aplikaci z brýlí…</string>
-    <string name="rokid_device_app_uninstalled">Naše aplikace byla z brýlí odstraněna.</string>
-    <string name="rokid_sending">Spouštím FAnn asistenta v brýlích…</string>
-    <string name="rokid_opened">FAnn asistent běží v brýlích. Mluv a kliknutím nebo posunem vyber produkt; dvojklikem aplikaci zavřeš.</string>
 </resources>

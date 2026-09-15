@@ -1,4 +1,4 @@
-package cz.suku.rokidglass.device.ui
+package cz.suku.rokidglass.deviceui
 
 import android.content.Context
 import android.graphics.Color
@@ -7,7 +7,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import cz.suku.rokidglass.device.R
+import cz.suku.rokidglass.deviceui.R
 import cz.suku.rokidglass.platform.DisplayProduct
 
 class FannAssistantView(context: Context) : ScrollView(context) {
@@ -58,13 +58,13 @@ class FannAssistantView(context: Context) : ScrollView(context) {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
-            setBackgroundColor(Color.rgb(7, 19, 12))
+            setBackgroundColor(Color.BLACK)
             addView(transcriptText)
             productViews.forEach(::addView)
         }
 
         isFillViewport = true
-        setBackgroundColor(Color.rgb(7, 19, 12))
+        setBackgroundColor(Color.BLACK)
         addView(content)
     }
 

@@ -7,7 +7,7 @@ import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.core.content.ContextCompat
-import cz.suku.rokidglass.device.ui.FannAssistantView
+import cz.suku.rokidglass.deviceui.FannAssistantView
 import cz.suku.rokidglass.platform.DisplayProduct
 import cz.suku.rokidglass.platform.GlassInput
 import cz.suku.rokidglass.platform.GlassInputReceiver
@@ -87,7 +87,9 @@ class MainActivity : Activity() {
 
     private fun handleGlassInput(input: GlassInput) {
         when (input) {
-            GlassInput.SUBMIT_TRANSCRIPT -> submit()
+            GlassInput.PRIMARY_ACTION -> sendInput(RokidContract.INPUT_SUBMIT_EVENT)
+            GlassInput.NEXT_PRODUCT -> sendInput(RokidContract.INPUT_NEXT_EVENT)
+            GlassInput.PREVIOUS_PRODUCT -> sendInput(RokidContract.INPUT_PREVIOUS_EVENT)
             GlassInput.EXIT_APP -> {
                 RokidSession.sendEvent(RokidContract.INPUT_EXIT_EVENT)
                 finishAndRemoveTask()
@@ -100,10 +102,16 @@ class MainActivity : Activity() {
             when (event.keyCode) {
                 KeyEvent.KEYCODE_ENTER,
                 KeyEvent.KEYCODE_DPAD_CENTER,
-                KeyEvent.KEYCODE_DPAD_RIGHT,
-                KeyEvent.KEYCODE_DPAD_LEFT,
                 -> {
-                    submit()
+                    sendInput(RokidContract.INPUT_SUBMIT_EVENT)
+                    return true
+                }
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    sendInput(RokidContract.INPUT_NEXT_EVENT)
+                    return true
+                }
+                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    sendInput(RokidContract.INPUT_PREVIOUS_EVENT)
                     return true
                 }
             }
@@ -111,11 +119,11 @@ class MainActivity : Activity() {
         return super.dispatchKeyEvent(event)
     }
 
-    private fun submit() {
+    private fun sendInput(event: String) {
         val now = SystemClock.elapsedRealtime()
         if (now - lastInputAt < INPUT_DEBOUNCE_MS) return
         lastInputAt = now
-        RokidSession.sendEvent(RokidContract.INPUT_SUBMIT_EVENT)
+        RokidSession.sendEvent(event)
     }
 
     override fun onDestroy() {

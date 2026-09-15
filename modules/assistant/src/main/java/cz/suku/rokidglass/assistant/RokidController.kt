@@ -1,4 +1,4 @@
-package cz.suku.rokidglass
+package cz.suku.rokidglass.assistant
 
 import android.content.Context
 import android.os.Handler
@@ -18,6 +18,8 @@ import cz.suku.rokidglass.platform.RokidContract
 import cz.suku.rokidglass.products.FannProduct
 import cz.suku.rokidglass.products.FannProductRepository
 import cz.suku.rokidglass.products.ProductCache
+import cz.suku.rokidglass.products.ProductDirection
+import cz.suku.rokidglass.products.ProductNavigator
 import cz.suku.rokidglass.products.ProductRepository
 import cz.suku.rokidglass.transcription.HttpTranscriptSink
 import cz.suku.rokidglass.transcription.TranscriptSink
@@ -41,6 +43,7 @@ class RokidController(context: Context) {
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
     private val productRepository: ProductRepository = FannProductRepository()
+    private val productNavigator = ProductNavigator(productRepository)
     private val transcriptSink: TranscriptSink = HttpTranscriptSink()
     private val productCache = ProductCache(appContext)
     private val ioExecutor = Executors.newSingleThreadExecutor()
@@ -402,6 +405,9 @@ class RokidController(context: Context) {
                     }
                 }
                 RokidContract.INPUT_SUBMIT_EVENT -> handlePrimaryInput()
+                RokidContract.INPUT_NEXT_EVENT -> handleDirectionalInput(ProductDirection.NEXT)
+                RokidContract.INPUT_PREVIOUS_EVENT ->
+                    handleDirectionalInput(ProductDirection.PREVIOUS)
                 RokidContract.INPUT_EXIT_EVENT -> stopGlassesMicrophone()
             }
         }
@@ -412,6 +418,14 @@ class RokidController(context: Context) {
             AssistantMode.LISTENING -> submitTranscriptAndLoadProduct()
             AssistantMode.LOADING_PRODUCT -> Unit
             AssistantMode.SHOWING_PRODUCT -> beginListening()
+        }
+    }
+
+    private fun handleDirectionalInput(direction: ProductDirection) {
+        when (assistantMode) {
+            AssistantMode.LISTENING -> submitTranscriptAndLoadProduct()
+            AssistantMode.LOADING_PRODUCT -> Unit
+            AssistantMode.SHOWING_PRODUCT -> loadAdjacentProduct(direction)
         }
     }
 
@@ -473,12 +487,9 @@ class RokidController(context: Context) {
         publish(appContext.getString(R.string.loading_product), false)
         ioExecutor.execute {
             runCatching { transcriptSink.submit(transcript) }
-            runCatching { productRepository.getRandomProduct(lastProductId) }
+            runCatching { productNavigator.getRandomProduct(lastProductId) }
                 .onSuccess { product ->
-                    lastProductId = product.id
-                    productCache.save(product)
-                    assistantMode = AssistantMode.SHOWING_PRODUCT
-                    sendDisplay(RokidContract.DISPLAY_PRODUCT, product.toDisplayProduct().toJson())
+                    showProduct(product)
                     transcriber.reset()
                     currentTranscript = ""
                     lastTranscriptSent = ""
@@ -492,6 +503,33 @@ class RokidController(context: Context) {
                     startGlassesMicrophoneIfReady()
                 }
         }
+    }
+
+    private fun loadAdjacentProduct(direction: ProductDirection) {
+        if (productPending) return
+        assistantMode = AssistantMode.LOADING_PRODUCT
+        productPending = true
+        publish(appContext.getString(R.string.loading_product), false)
+        ioExecutor.execute {
+            runCatching { productNavigator.getAdjacentProduct(lastProductId, direction) }
+                .onSuccess { product ->
+                    showProduct(product)
+                    productPending = false
+                    publish(appContext.getString(R.string.product_sent_to_glasses), true)
+                }
+                .onFailure { error ->
+                    productPending = false
+                    assistantMode = AssistantMode.SHOWING_PRODUCT
+                    publish(error.message ?: appContext.getString(R.string.unknown_error), true)
+                }
+        }
+    }
+
+    private fun showProduct(product: FannProduct) {
+        lastProductId = product.id
+        productCache.save(product)
+        assistantMode = AssistantMode.SHOWING_PRODUCT
+        sendDisplay(RokidContract.DISPLAY_PRODUCT, product.toDisplayProduct().toJson())
     }
 
     private fun FannProduct.toDisplayProduct() = DisplayProduct(

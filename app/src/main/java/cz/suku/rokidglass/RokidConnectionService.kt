@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Binder
 import android.os.IBinder
+import cz.suku.rokidglass.assistant.RokidController
 
 class RokidConnectionService : Service() {
     inner class LocalBinder : Binder() {

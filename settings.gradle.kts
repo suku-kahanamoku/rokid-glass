@@ -19,5 +19,7 @@ rootProject.name = "rokid-glass"
 include(":app")
 include(":device")
 include(":modules:glasses-platform")
+include(":modules:assistant")
+include(":modules:device-ui")
 include(":modules:products")
 include(":modules:transcription")

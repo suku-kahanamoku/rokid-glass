@@ -1,0 +1,8 @@
+<resources>
+    <string name="product_price">Cena s DPH: %1$s %2$s</string>
+    <string name="product_character">Charakter: %1$s</string>
+    <string name="product_sales_argument">Argument: %1$s</string>
+    <string name="product_upsell">Vyšší varianta: %1$s</string>
+    <string name="product_basket">Doplněk: %1$s</string>
+    <string name="product_alternatives">Alternativy: %1$s</string>
+</resources>

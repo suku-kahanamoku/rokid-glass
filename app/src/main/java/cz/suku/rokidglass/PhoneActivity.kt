@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import com.rokid.sprite.aiapp.externalapp.auth.AuthResult
 import com.rokid.sprite.aiapp.externalapp.auth.AuthorizationHelper
 import com.rokid.sprite.aiapp.externalapp.auth.GlassPermission
+import cz.suku.rokidglass.assistant.RokidController
 
 /** Phone UI only. The foreground service owns the long-running Rokid session. */
 class PhoneActivity : AppCompatActivity() {

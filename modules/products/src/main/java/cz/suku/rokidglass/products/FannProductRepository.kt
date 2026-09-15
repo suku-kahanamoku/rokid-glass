@@ -2,23 +2,17 @@ package cz.suku.rokidglass.products
 
 import java.net.HttpURLConnection
 import java.net.URL
-import kotlin.random.Random
 
 class FannProductRepository(
     private val endpoint: String = DEFAULT_ENDPOINT,
-    private val random: Random = Random.Default,
 ) : ProductRepository {
+    override fun getProducts(): List<FannProduct> =
+        FannProductParser.parseList(get("$endpoint?limit=100"))
+
     override fun getProduct(id: Int): FannProduct {
         val product = FannProductParser.parseDetail(get("$endpoint/$id"))
         if (product.id != id) throw ProductApiException("FAnn API vrátilo jiný produkt")
         return product
-    }
-
-    override fun getRandomProduct(excludingId: Int?): FannProduct {
-        val products = FannProductParser.parseList(get("$endpoint?limit=100"))
-        val candidates = products.filterNot { it.id == excludingId }.ifEmpty { products }
-        if (candidates.isEmpty()) throw ProductApiException("FAnn API neobsahuje produkty")
-        return getProduct(candidates.random(random).id)
     }
 
     private fun get(url: String): String {
