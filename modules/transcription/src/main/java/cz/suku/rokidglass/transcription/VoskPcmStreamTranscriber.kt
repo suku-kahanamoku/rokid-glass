@@ -40,6 +40,7 @@ class VoskPcmStreamTranscriber(
                 }
                 runCatching {
                     val loadedRecognizer = Recognizer(loadedModel, SAMPLE_RATE)
+                    loadedRecognizer.setWords(true)
                     synchronized(recognizerLock) {
                         model = loadedModel
                         recognizer = loadedRecognizer
@@ -60,7 +61,7 @@ class VoskPcmStreamTranscriber(
             synchronized(recognizerLock) {
                 val loadedRecognizer = recognizer ?: return
                 if (loadedRecognizer.acceptWaveForm(audio, length)) {
-                    RecognitionResult.Final(loadedRecognizer.result.value("text"))
+                    RecognitionResult.Final(loadedRecognizer.result.finalText())
                 } else {
                     RecognitionResult.Partial(loadedRecognizer.partialResult.value("partial"))
                 }
@@ -112,6 +113,21 @@ class VoskPcmStreamTranscriber(
         sanitizeRecognizerText(JSONObject(orEmpty()).optString(key))
     }.getOrDefault("")
 
+    /** Drops words below [MIN_WORD_CONFIDENCE], which are usually noise picked up as speech. */
+    private fun String?.finalText(): String = runCatching {
+        val json = JSONObject(orEmpty())
+        val words = json.optJSONArray("result")
+        if (words == null || words.length() == 0) return sanitizeRecognizerText(json.optString("text"))
+        buildString {
+            for (index in 0 until words.length()) {
+                val word = words.getJSONObject(index)
+                if (word.optDouble("conf", 1.0) < MIN_WORD_CONFIDENCE) continue
+                if (isNotEmpty()) append(' ')
+                append(word.optString("word"))
+            }
+        }.let(::sanitizeRecognizerText)
+    }.getOrDefault("")
+
     private fun combine(first: String, second: String): String =
         listOf(first.trim(), second.trim()).filter(String::isNotBlank).joinToString(" ")
 
@@ -127,6 +143,7 @@ class VoskPcmStreamTranscriber(
 
     private companion object {
         const val SAMPLE_RATE = 16_000f
+        const val MIN_WORD_CONFIDENCE = 0.35
         const val MODEL_ASSET_PATH = "model-cs"
         const val MODEL_STORAGE_PATH = "vosk-phone"
     }
