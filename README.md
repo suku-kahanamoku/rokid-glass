@@ -353,6 +353,11 @@ V režimu `LISTENING` drží device aktivita displej brýlí zapnutý pomocí
 zobrazení produktu se tento příznak uvolní a brýle se mohou po systémovém limitu
 opět uspat. Ukončení nebo opuštění aplikace příznak také vždy odstraní.
 
+Pokud přepis přeroste výšku displeje, `FannAssistantView` po každé textové
+aktualizaci automaticky posune svůj `ScrollView` na konec. Nejnovější věta tak
+zůstává viditelná. Po vyčištění přepisu nebo zobrazení produktu se obsah vrátí
+na začátek.
+
 Přepis nepoužívá cloudovou rozpoznávací službu ani Rokid AK/SK: Vosk běží
 offline v telefonu. Audio však přes CXR-L putuje z mikrofonu brýlí do telefonu a
 text putuje zpět. Internet v telefonu je potřeba až pro odeslání transkripce na

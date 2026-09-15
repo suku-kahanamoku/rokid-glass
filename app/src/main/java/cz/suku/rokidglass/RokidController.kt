@@ -61,6 +61,7 @@ class RokidController(context: Context) {
     private var appRunning = false
     private var deviceReady = false
     private var appStatusQueryInProgress = false
+    private var deviceVersionChecked = false
     private var appInstallInProgress = false
     private var appStartInProgress = false
     private var pendingDeviceVersion: Long? = null
@@ -187,6 +188,7 @@ class RokidController(context: Context) {
         cxrConnected = false
         glassesConnected = false
         appRunning = false
+        deviceVersionChecked = false
         publish(appContext.getString(R.string.rokid_connecting), false)
         if (!cxrLink.connect(token)) {
             publish(appContext.getString(R.string.rokid_connection_failed), true)
@@ -213,15 +215,18 @@ class RokidController(context: Context) {
 
     private fun ensureDeviceAppReady() {
         if (!isConnected) return
-        when {
-            appRunning && deviceReady -> publish(appContext.getString(R.string.rokid_opened), true)
-            appRunning -> publish(appContext.getString(R.string.rokid_waiting_device_app), false)
-            appInstalled -> startDeviceApp()
-            !appStatusQueryInProgress && !appInstallInProgress -> {
+        if (!deviceVersionChecked) {
+            if (!appStatusQueryInProgress && !appInstallInProgress) {
                 appStatusQueryInProgress = true
                 publish(appContext.getString(R.string.rokid_checking_device_app), false)
                 cxrLink.appIsInstalled(glassAppCallback)
             }
+            return
+        }
+        when {
+            appRunning && deviceReady -> publish(appContext.getString(R.string.rokid_opened), true)
+            appRunning -> publish(appContext.getString(R.string.rokid_waiting_device_app), false)
+            appInstalled -> startDeviceApp()
         }
     }
 
@@ -305,6 +310,7 @@ class RokidController(context: Context) {
             appInstallInProgress = false
             appInstalled = success
             if (success) {
+                deviceVersionChecked = true
                 pendingDeviceVersion?.let {
                     preferences.edit().putLong(DEVICE_VERSION_KEY, it).apply()
                 }
@@ -322,6 +328,7 @@ class RokidController(context: Context) {
             appInstalled = false
             appRunning = false
             deviceReady = false
+            deviceVersionChecked = false
             preferences.edit().remove(DEVICE_VERSION_KEY).apply()
             publish(appContext.getString(R.string.rokid_device_app_uninstalled), true)
         }
@@ -349,7 +356,7 @@ class RokidController(context: Context) {
             appRunning = resumed
             deviceReady = resumed
             if (resumed) {
-                publish(appContext.getString(R.string.rokid_opened), true)
+                ensureDeviceAppReady()
             } else {
                 stopGlassesMicrophone()
                 publish(appContext.getString(R.string.rokid_device_app_closed), true)
@@ -365,7 +372,13 @@ class RokidController(context: Context) {
             }.getOrNull()
             val lastInstalledVersion = preferences.getLong(DEVICE_VERSION_KEY, -1L)
             if (installed && embeddedVersion != null && embeddedVersion == lastInstalledVersion) {
-                startDeviceApp()
+                deviceVersionChecked = true
+                if (appRunning && deviceReady) {
+                    publish(appContext.getString(R.string.rokid_opened), true)
+                    beginListening()
+                } else {
+                    startDeviceApp()
+                }
             } else {
                 installDeviceApp()
             }
@@ -381,8 +394,12 @@ class RokidController(context: Context) {
                 RokidContract.READY_EVENT -> {
                     appRunning = true
                     deviceReady = true
-                    publish(appContext.getString(R.string.rokid_opened), true)
-                    beginListening()
+                    if (deviceVersionChecked) {
+                        publish(appContext.getString(R.string.rokid_opened), true)
+                        beginListening()
+                    } else {
+                        ensureDeviceAppReady()
+                    }
                 }
                 RokidContract.INPUT_SUBMIT_EVENT -> handlePrimaryInput()
                 RokidContract.INPUT_EXIT_EVENT -> stopGlassesMicrophone()

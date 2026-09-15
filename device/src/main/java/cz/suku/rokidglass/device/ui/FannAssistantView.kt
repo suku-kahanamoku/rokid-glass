@@ -19,6 +19,8 @@ class FannAssistantView(context: Context) : ScrollView(context) {
     private val productDetails: TextView
     private val productAlternatives: TextView
     private val productViews: List<TextView>
+    private val scrollTranscriptToBottom = Runnable { fullScroll(View.FOCUS_DOWN) }
+    private val scrollContentToTop = Runnable { scrollTo(0, 0) }
 
     init {
         val density = resources.displayMetrics.density
@@ -78,9 +80,12 @@ class FannAssistantView(context: Context) : ScrollView(context) {
         transcriptText.text = transcript
         transcriptText.alpha = if (isFinal) 1f else 0.82f
         transcriptText.visibility = View.VISIBLE
+        removeCallbacks(scrollTranscriptToBottom)
+        post(scrollTranscriptToBottom)
     }
 
     fun showProduct(product: DisplayProduct) {
+        removeCallbacks(scrollTranscriptToBottom)
         transcriptText.text = ""
         transcriptText.visibility = View.GONE
 
@@ -113,11 +118,16 @@ class FannAssistantView(context: Context) : ScrollView(context) {
         productViews.forEach { view ->
             view.visibility = if (view.text.isNullOrBlank()) View.GONE else View.VISIBLE
         }
+        removeCallbacks(scrollContentToTop)
+        post(scrollContentToTop)
     }
 
     fun clear() {
+        removeCallbacks(scrollTranscriptToBottom)
         transcriptText.text = ""
         transcriptText.visibility = View.INVISIBLE
         productViews.forEach { it.visibility = View.GONE }
+        removeCallbacks(scrollContentToTop)
+        post(scrollContentToTop)
     }
 }
