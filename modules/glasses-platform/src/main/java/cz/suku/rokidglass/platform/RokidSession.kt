@@ -6,6 +6,7 @@ import com.rokid.cxr.Caps
 object RokidSession {
     interface Listener {
         fun onConnectionChanged(connected: Boolean)
+        fun onDisplayCommand(action: String, payload: String) = Unit
     }
 
     private val bridge = CXRServiceBridge()
@@ -33,6 +34,12 @@ object RokidSession {
             override fun onRokidAccountChanged(account: String?) = Unit
             override fun onAudioNoise(value: Float) = Unit
         })
+        bridge.subscribe(RokidContract.DISPLAY_COMMAND) { _, caps, binary ->
+            if (caps.size() < 1 || caps.at(0).type() != Caps.Value.TYPE_STRING) return@subscribe
+            val action = caps.at(0).string
+            val payload = binary?.toString(Charsets.UTF_8).orEmpty()
+            listener?.onDisplayCommand(action, payload)
+        }
     }
 
     fun attach(listener: Listener) {

@@ -1,26 +1,30 @@
 # Rokid Glass
 
 Modulární dvojice Android aplikací pro FAnn asistenta v consumer Rokid Glasses.
-Brýle průběžně převádějí českou řeč na text a po kliknutí nebo posunu boční
-dotykové plochy zobrazí náhodný produkt z FAnn CRM.
+Brýle slouží pouze jako mikrofon, displej a vstupní zařízení. Telefon přijímá
+zvuk z mikrofonu brýlí, lokálně jej převádí na český text a po kliknutí nebo
+posunu boční dotykové plochy načte náhodný produkt z FAnn CRM. Přepis i produkt
+posílá zpět na displej brýlí.
 
 ```text
 rokid-glass/
 ├── app/                         telefonní aplikace
 ├── device/                      spustitelná aplikace v brýlích
 └── modules/
-    ├── glasses-platform/        Rokid spojení a boční vstupy
-    ├── products/                produktové API, modely a cache
-    └── transcription/           přepis řeči a odeslání transkripce
+    ├── glasses-platform/        obousměrný Rokid protokol a zobrazovací DTO
+    ├── products/                telefonní produktové API, modely a cache
+    └── transcription/           telefonní přepis a odeslání transkripce
 
-app -> Hi Rokid / CXR-L CUSTOMAPP -> device
+mikrofon brýlí -> CXR-L -> telefonní Vosk -> přepis / API
+boční vstup    -> CXR-L -> telefon           -> náhodný produkt
+displej brýlí  <- CXR-L <- telefon           <- přepis nebo produkt
 ```
 
-Telefon instaluje, aktualizuje a spouští device APK v brýlích. Potom už device
-aplikace používá mikrofon brýlí a český offline model samostatně. Wi-Fi potřebuje
-jen pro načtení produktů. Kliknutí, posun dopředu i
-posun dozadu odešlou aktuální přepis a vyberou produkt; dvojklik aplikaci zavře
-do hlavního menu brýlí.
+Telefon instaluje, aktualizuje a spouští device APK v brýlích a po celou dobu
+zajišťuje veškerou aplikační logiku. Device aplikace pouze předává mikrofonní
+stream a boční vstupy do telefonu a vykresluje data přijatá z telefonu. Kliknutí,
+posun dopředu i posun dozadu odešlou aktuální přepis a vyberou produkt;
+dvojklik aplikaci zavře do hlavního menu brýlí.
 
 ## Moduly
 
@@ -29,14 +33,15 @@ do hlavního menu brýlí.
 ```
 
 - `app`: telefonní aplikace, balíček `cz.suku.rokidglass`;
-- `device`: aplikace v brýlích, balíček
-  `cz.suku.rokidglass.device`; obsahuje životní cyklus a sestavení obrazovky;
-- `modules:glasses-platform`: `RokidSession`, diagnostické zprávy a sjednocení
-  fyzického tlačítka i boční dotykové plochy;
+- `device`: tenký klient v brýlích, balíček `cz.suku.rokidglass.device`;
+  vykresluje přepis nebo produkt a předává boční vstupy telefonu;
+- `modules:glasses-platform`: obousměrný CXR protokol, `RokidSession`,
+  zobrazovací DTO a sjednocení fyzického tlačítka i boční dotykové plochy;
 - `modules:products`: model produktu, parser, veřejné FAnn API, náhodný výběr a
-  lokální cache posledního produktu;
+  lokální cache posledního produktu; používá jej pouze telefon;
 - `modules:transcription`: výměnné rozhraní přepisu řeči, lokální Vosk
-  implementace s českým modelem a výměnný HTTP odesílač transkripce.
+  implementace krmená PCM streamem z brýlí a výměnný HTTP odesílač transkripce;
+  používá jej pouze telefon.
 
 Telefon používá `com.rokid.cxr:client-l:1.1.1`. Modul `glasses-platform` používá
 `com.rokid.cxr:cxr-service-bridge:1.0-20260715.121510-107`, tedy stejnou bridge
@@ -48,9 +53,10 @@ verzi, kterou přináší telefonní CXR-L klient.
 - Android SDK Platform 36;
 - Android telefon s Androidem 12 / API 31 nebo novějším;
 - aplikace Hi Rokid přihlášená a spárovaná s brýlemi;
-- Bluetooth pro instalaci a spuštění, Wi-Fi v brýlích pouze pro načítání
-  produktů;
-- povolený mikrofon pro FAnn asistenta v brýlích;
+- Bluetooth mezi telefonem a brýlemi po celou dobu používání;
+- internet v telefonu pro načítání produktů; vlastní Wi-Fi brýlí není potřeba;
+- oprávnění `DEVICE_MANAGE` a `MICROPHONE` udělené telefonní aplikaci přes Hi
+  Rokid;
 - USB ladění v telefonu pro instalaci telefonní APK.
 
 Pokud Android SDK není automaticky nalezené, vytvoř v kořeni projektu lokální,
@@ -81,9 +87,9 @@ Gradle automaticky provede tento řetězec:
 
 Při prvním sestavení modul `transcription` stáhne český model
 `vosk-model-small-cs-0.4-rhasspy` (přibližně 46 MB), ověří jeho SHA-256 a vloží
-ho do device APK. Archiv se ukládá jen do lokální `.gradle/vosk-models/` cache a
-do Gitu se neukládá. Při prvním spuštění nové device verze brýle model jednou
-rozbalí; zelená obrazovka proto může několik sekund zůstat prázdná.
+ho do telefonní APK. Archiv se ukládá jen do lokální `.gradle/vosk-models/`
+cache a do Gitu se neukládá. Při prvním spuštění nové telefonní verze se model
+jednou rozbalí. Device APK model ani knihovnu Vosk neobsahuje.
 
 Výsledky:
 
@@ -135,17 +141,21 @@ APK nahraje do brýlí telefonní aplikace přes CXR-L.
 
 ## První spuštění
 
-1. Zapni Bluetooth a Wi-Fi.
+1. Zapni Bluetooth a internet v telefonu.
 2. V Hi Rokid ověř připojené brýle.
 3. Nasaď si brýle a ověř aktivní displej.
 4. Spusť `Rokid Glass` v telefonu.
 5. Klepni na **Nainstalovat/spustit aplikaci v brýlích**.
-6. Při prvním spuštění potvrď oprávnění `DEVICE_MANAGE` v Hi Rokid.
+6. Při prvním spuštění potvrď v Hi Rokid oprávnění `DEVICE_MANAGE` a
+   `MICROPHONE`.
 7. Telefon ověří instalaci device APK.
 8. Pokud chybí nebo se změnila její verze, nahraje ji do brýlí.
 9. Telefon device aplikaci spustí a počká na zprávu `ready`.
-10. V brýlích povol aplikaci přístup k mikrofonu.
-11. Jakmile se zobrazí `Poslouchám…`, začni mluvit.
+10. Telefon spustí audio stream z mikrofonu brýlí a lokální český přepis.
+11. Začni mluvit; v brýlích se zobrazí pouze zachycený text.
+
+Telefonní aplikaci během práce s asistentem neukončuj ani násilně neodstraňuj z
+běžících aplikací. Bez telefonu se zastaví přepis, API i reakce na boční vstupy.
 
 Telefonní obrazovka obsahuje také tlačítko pro zastavení device aplikace a
 potvrzované tlačítko pro její odinstalaci. Odinstalace odstraní jen balíček
@@ -310,26 +320,30 @@ balíčku s nižším číslem verze.
 
 Po otevření FAnn asistenta:
 
-1. aplikace požádá o oprávnění mikrofonu;
-2. modul `transcription` rozbalí český Vosk model a spustí lokální poslech
-   mikrofonu v brýlích;
-3. úvodní obrazovka je prázdná a až skutečně zachycená průběžná nebo finální transkripce se zobrazí v brýlích;
-4. kliknutí nebo posun boční plochy v libovolném směru pořídí snapshot textu;
-5. transkripce se předá nakonfigurovanému `TranscriptSink`;
-6. modul `products` vybere jiný náhodný publikovaný produkt;
-7. teprve po dokončení požadavku aplikace skryje přepis, zobrazí produkt a znovu začne poslouchat další rozhovor.
+1. telefon přes Hi Rokid získá oprávnění ke správě device aplikace a mikrofonu;
+2. brýle oznámí telefonu, že jejich tenký klient běží;
+3. telefon spustí CXR audio stream z mikrofonu brýlí;
+4. telefonní modul `transcription` zpracuje 16kHz mono PCM českým Vosk modelem;
+5. úvodní obrazovka brýlí je prázdná a zobrazí až skutečně zachycený průběžný
+   nebo finální přepis přijatý z telefonu;
+6. kliknutí nebo posun boční plochy v libovolném směru pošle telefonu příkaz k
+   potvrzení aktuálního přepisu;
+7. telefon předá snapshot textu nakonfigurovanému `TranscriptSink` a modul
+   `products` vybere jiný náhodný publikovaný produkt;
+8. telefon pošle prezentační data produktu do brýlí, které je pouze vykreslí, a
+   přepis se připraví na další rozhovor.
 
 Dvojklik aplikaci ukončí. Pro boční dotykovou plochu se zpracovávají
 `KEYCODE_ENTER`, `KEYCODE_DPAD_RIGHT` a `KEYCODE_DPAD_LEFT`. Krátký debounce a
 blokace probíhajícího požadavku zabraňují tomu, aby jeden fyzický posun načetl
 více produktů.
 
-Na fyzických brýlích přepis používá Vosk přímo nad lokálním mikrofonem při
-16 kHz. Průběžné i dokončené věty se zobrazují bez odesílání audia nebo textu do
-telefonu či cloudové rozpoznávací služby. Aplikace tedy pro přepis nepotřebuje
-Rokid AK/SK, Hi Rokid hlasovou autorizaci ani připojení k internetu. Původní
-systémový Android `SpeechRecognizer` zůstává v modulu pouze jako případná
-záložní implementace pro obyčejný Android; device aplikace jej nepoužívá.
+Přepis nepoužívá cloudovou rozpoznávací službu ani Rokid AK/SK: Vosk běží
+offline v telefonu. Audio však přes CXR-L putuje z mikrofonu brýlí do telefonu a
+text putuje zpět. Internet v telefonu je potřeba až pro odeslání transkripce na
+neprázdné testovací URL a pro načtení produktu. Původní systémový Android
+`SpeechRecognizer` zůstává v modulu pouze jako alternativní implementace;
+aktuální tok jej nepoužívá.
 
 ## Testovací URL pro transkripci
 
@@ -339,8 +353,8 @@ Výchozí URL je záměrně prázdná v:
 modules/transcription/src/main/java/cz/suku/rokidglass/transcription/TranscriptionConfig.kt
 ```
 
-Proto se nyní text neposílá mimo brýle a `HttpTranscriptSink` vrací úspěšný
-no-op stav. Až bude cílové API připravené, nastav například:
+Proto se nyní text neposílá z telefonu na žádný server a `HttpTranscriptSink`
+vrací úspěšný no-op stav. Až bude cílové API připravené, nastav například:
 
 ```kotlin
 const val TRANSCRIPT_ENDPOINT = "https://example.test/api/transcript"
@@ -356,7 +370,7 @@ Odesílač provede `POST` s JSON tělem:
 
 ## FAnn produktové API
 
-Produktový modul komunikuje bez přihlášení s:
+Produktový modul v telefonu komunikuje bez přihlášení s:
 
 ```text
 GET https://fann-crm.netlify.app/api/admin/product?limit=100
@@ -369,28 +383,32 @@ charakter, hlavní prodejní argument, vyšší variantu, doplněk a alternativy
 Nepublikované produkty se nepoužijí a pokud je v katalogu více možností,
 bezprostředně předchozí produkt se znovu nevybere.
 
-Poslední úspěšný produkt je uložený v cache pouze kvůli tomu, aby se při dalším
-výběru neopakoval. Po novém spuštění se cache na obrazovce nezobrazuje; obrazovka
-zůstane prázdná až do zachycení řeči.
+Poslední úspěšný produkt je uložený v cache telefonu pouze kvůli tomu, aby se
+při dalším výběru neopakoval. Po novém spuštění se cache na obrazovce brýlí
+nezobrazuje; obrazovka zůstane prázdná až do zachycení řeči.
 
-Po úspěšné instalaci telefon není pro přepis ani načítání produktů potřeba.
-Samotný přepis funguje offline; Wi-Fi v brýlích je nutná až pro následné načtení
-produktu z FAnn API.
+Telefon je nutný po celou dobu používání. Brýle samy neprovádějí přepis,
+nevolají FAnn API a neuchovávají katalog produktů.
 
 ## Komunikační protokol
 
 ```text
 cz.suku.rokidglass.event
-    brýle -> telefon, diagnostická hodnota ready nebo stav přímého API
+    brýle -> telefon: ready, input_submit, input_exit
+
+cz.suku.rokidglass.display
+    telefon -> brýle: clear, transcript, product + binární UTF-8 payload
 ```
 
-`ready` potvrzuje telefonu, že device aplikace běží. Diagnostika může dále poslat
-`transcription_ready`, `product_loaded:{id}` nebo stav chyby sítě. Transkripce,
-produkty ani příkazy bočního ovládání se přes telefon neposílají.
+`ready` potvrzuje telefonu, že device aplikace běží. `input_submit` potvrzuje
+aktuální přepis a `input_exit` zastaví mikrofonní stream. Telefon posílá prázdnou
+obrazovku, průběžný přepis nebo serializovaný `DisplayProduct`; brýle neznají API
+model `FannProduct`.
 
-Telefon používá foreground service s trvalým oznámením pouze pro správu CXR
-spojení. Ukončení telefonní aplikace nemá vliv na přepis ani načítání produktů v
-již nainstalované device aplikaci.
+Telefon používá foreground service s trvalým oznámením pro viditelné CXR
+spojení. Aktuální řídicí relace, přepis a produktová logika žijí v telefonní
+`MainActivity`, takže její násilné ukončení relaci ukončí. Device aplikace může
+zůstat otevřená, ale bez telefonu nemá zdroj nového obsahu.
 
 ## Diagnostika
 
@@ -399,11 +417,12 @@ Bezpečně filtrované logy telefonu:
 ```bash
 adb -s HZQL1838HAL22301864 logcat -v time \
   | rg -v -i 'token' \
-  | rg 'CXR|CustomApp|rokidglass'
+  | rg 'CXR|CustomApp|rokidglass|RokidAudio'
 ```
 
 Řádky obsahující token nesdílej. CXR-L může do Logcatu vypsat dočasný
-autorizační token.
+autorizační token. Tag `RokidAudio` zapisuje pouze délku přijatého bufferu,
+celkový počet bytů a délku rozpoznaného textu; nezapisuje zvuk ani samotný text.
 
 ## Co lze ověřit bez fyzických brýlí
 
@@ -411,8 +430,9 @@ autorizační token.
 - jednotkové testy parsování produktového API a prázdného transcript sinku;
 - Android lint;
 - zabalení device APK uvnitř telefonní APK;
+- ověření, že device APK neobsahuje Vosk model ani nativní Vosk knihovnu;
 - identitu, verzi a podpis APK.
 
 Instalaci přes `appUploadAndInstall()`, spuštění přes `appStart()`, dostupnost
-mikrofonní recognition služby, reálný přepis a fyzické boční vstupy lze potvrdit
-až s připojeným telefonem a brýlemi.
+audio streamu z mikrofonu, reálný přepis, zobrazení a fyzické boční vstupy lze
+potvrdit až s připojeným telefonem a brýlemi.

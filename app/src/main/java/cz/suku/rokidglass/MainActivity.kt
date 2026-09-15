@@ -3,6 +3,8 @@ package cz.suku.rokidglass
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.os.SystemClock
+import android.util.Log
 import android.view.Gravity
 import android.widget.Button
 import android.widget.LinearLayout
@@ -14,19 +16,36 @@ import com.rokid.cxr.Caps
 import com.rokid.cxr.link.CXRLink
 import com.rokid.cxr.link.callbacks.ICustomCmdCbk
 import com.rokid.cxr.link.callbacks.ICXRLinkCbk
+import com.rokid.cxr.link.callbacks.IAudioStreamCbk
 import com.rokid.cxr.link.callbacks.IGlassAppCbk
 import com.rokid.cxr.link.utils.CxrDefs
 import com.rokid.cxr.link.utils.GlassInfo
 import com.rokid.sprite.aiapp.externalapp.auth.AuthResult
 import com.rokid.sprite.aiapp.externalapp.auth.AuthorizationHelper
 import com.rokid.sprite.aiapp.externalapp.auth.GlassPermission
+import cz.suku.rokidglass.platform.DisplayProduct
+import cz.suku.rokidglass.platform.RokidContract
+import cz.suku.rokidglass.products.FannProduct
+import cz.suku.rokidglass.products.FannProductRepository
+import cz.suku.rokidglass.products.ProductCache
+import cz.suku.rokidglass.products.ProductRepository
+import cz.suku.rokidglass.transcription.HttpTranscriptSink
+import cz.suku.rokidglass.transcription.TranscriptSink
+import cz.suku.rokidglass.transcription.VoskPcmStreamTranscriber
 import java.io.File
+import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var actionButton: Button
     private lateinit var stopButton: Button
     private lateinit var uninstallButton: Button
+    private lateinit var transcriber: VoskPcmStreamTranscriber
+    private lateinit var productCache: ProductCache
+
+    private val productRepository: ProductRepository = FannProductRepository()
+    private val transcriptSink: TranscriptSink = HttpTranscriptSink()
+    private val ioExecutor = Executors.newSingleThreadExecutor()
 
     private var cxrConnected = false
     private var glassesConnected = false
@@ -37,6 +56,16 @@ class MainActivity : AppCompatActivity() {
     private var appInstallInProgress = false
     private var appStartInProgress = false
     private var pendingDeviceVersion: Long? = null
+    private var recognizerReady = false
+    private var audioStreaming = false
+    private var productPending = false
+    private var currentTranscript = ""
+    private var lastProductId: Int? = null
+    private var lastTranscriptSentAt = 0L
+    private var lastTranscriptSent = ""
+    private var audioBytesReceived = 0L
+    private var audioDataReported = false
+    private var audioSignalReported = false
 
     private val cxrLink: CXRLink by lazy {
         CXRLink(applicationContext).apply {
@@ -47,8 +76,78 @@ class MainActivity : AppCompatActivity() {
                 ),
             )
             setCXRLinkCbk(linkCallback)
+            setCXRAudioCbk(audioStreamCallback)
             setCXRCustomCmdCbk(customCommandCallback)
             setCXRGlassAppCbk(glassAppCallback)
+        }
+    }
+
+    private val transcriptionListener = object : VoskPcmStreamTranscriber.Listener {
+        override fun onReady() {
+            recognizerReady = true
+            showStatus(getString(R.string.phone_transcription_ready), enableButton = true)
+            startGlassesMicrophoneIfReady()
+        }
+
+        override fun onTranscriptChanged(text: String, isFinal: Boolean) {
+            currentTranscript = text.trim()
+            if (currentTranscript.isNotBlank()) {
+                Log.i(AUDIO_LOG_TAG, "Recognized transcript length=${currentTranscript.length}")
+            }
+            val now = SystemClock.elapsedRealtime()
+            if (
+                currentTranscript != lastTranscriptSent &&
+                (isFinal || now - lastTranscriptSentAt >= TRANSCRIPT_UPDATE_INTERVAL_MS)
+            ) {
+                lastTranscriptSent = currentTranscript
+                lastTranscriptSentAt = now
+                sendDisplay(RokidContract.DISPLAY_TRANSCRIPT, currentTranscript)
+            }
+        }
+
+        override fun onError(message: String) {
+            showStatus(message, enableButton = true)
+        }
+    }
+
+    private val audioStreamCallback = object : IAudioStreamCbk {
+        override fun onAudioReceived(data: ByteArray?, offset: Int, length: Int) {
+            val chunk = data ?: return
+            if (offset < 0 || length <= 0 || offset + length > chunk.size) return
+            audioBytesReceived += length
+            if (!audioDataReported) {
+                audioDataReported = true
+                Log.i(AUDIO_LOG_TAG, "First microphone PCM chunk received; length=$length")
+                showStatus(getString(R.string.rokid_audio_stream), enableButton = true)
+            }
+            if (!audioSignalReported && pcmPeak(chunk, offset, length) >= PCM_SIGNAL_THRESHOLD) {
+                audioSignalReported = true
+                Log.i(AUDIO_LOG_TAG, "Microphone signal detected; bytes=$audioBytesReceived")
+                showStatus(getString(R.string.rokid_audio_signal), enableButton = true)
+            }
+            transcriber.acceptPcm(chunk, offset, length)
+        }
+
+        override fun onAudioError(errorCode: Int, errorInfo: String?) {
+            audioStreaming = false
+            showStatus(
+                getString(
+                    R.string.rokid_audio_error,
+                    errorInfo ?: errorCode.toString(),
+                ),
+                enableButton = true,
+            )
+        }
+
+        override fun onAudioStreamStateChanged(started: Boolean) {
+            audioStreaming = started
+            showStatus(
+                getString(
+                    if (started) R.string.rokid_phone_listening
+                    else R.string.rokid_audio_stopped,
+                ),
+                enableButton = true,
+            )
         }
     }
 
@@ -58,6 +157,9 @@ class MainActivity : AppCompatActivity() {
             this,
             Intent(this, RokidConnectionService::class.java),
         )
+        productCache = ProductCache(this)
+        lastProductId = productCache.load()?.id
+        transcriber = VoskPcmStreamTranscriber(this, transcriptionListener)
 
         status = TextView(this).apply {
             text = getString(R.string.rokid_disconnected)
@@ -127,7 +229,7 @@ class MainActivity : AppCompatActivity() {
         try {
             val immediateResult = AuthorizationHelper.requestAuthorization(
                 this,
-                arrayOf(GlassPermission.DEVICE_MANAGE),
+                arrayOf(GlassPermission.DEVICE_MANAGE, GlassPermission.MICROPHONE),
                 AUTH_REQUEST_CODE,
             )
             if (immediateResult != null) {
@@ -228,6 +330,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun stopDeviceApp() {
         if (!cxrConnected || !glassesConnected || !appRunning) return
+        stopGlassesMicrophone()
         showStatus(getString(R.string.rokid_stopping_device_app), enableButton = false)
         cxrLink.appStop(glassAppCallback)
     }
@@ -254,6 +357,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 runOnUiThread(::ensureDeviceAppReady)
             } else {
+                stopGlassesMicrophone()
                 appRunning = false
                 deviceReady = false
                 showStatus(getString(R.string.rokid_connection_failed), enableButton = true)
@@ -265,6 +369,7 @@ class MainActivity : AppCompatActivity() {
             if (isConnected) {
                 runOnUiThread(::ensureDeviceAppReady)
             } else {
+                stopGlassesMicrophone()
                 appRunning = false
                 deviceReady = false
                 showStatus(getString(R.string.rokid_bluetooth_waiting), enableButton = true)
@@ -344,6 +449,7 @@ class MainActivity : AppCompatActivity() {
                 if (resumed) {
                     showStatus(getString(R.string.rokid_opened), enableButton = true)
                 } else {
+                    stopGlassesMicrophone()
                     showStatus(getString(R.string.rokid_device_app_closed), enableButton = true)
                 }
                 updateDeviceControls()
@@ -373,57 +479,107 @@ class MainActivity : AppCompatActivity() {
 
     private val customCommandCallback = object : ICustomCmdCbk {
         override fun onCustomCmdResult(key: String?, payload: ByteArray?) {
-            if (key != EVENT_COMMAND || payload == null) return
+            if (key != RokidContract.EVENT_COMMAND || payload == null) return
             val caps = runCatching { Caps.fromBytes(payload) }.getOrNull() ?: return
             if (caps.size() == 0 || caps.at(0).type() != Caps.Value.TYPE_STRING) return
 
             when (caps.at(0).string) {
-                READY_EVENT -> runOnUiThread {
+                RokidContract.READY_EVENT -> runOnUiThread {
                     appRunning = true
                     deviceReady = true
                     updateDeviceControls()
                     showStatus(getString(R.string.rokid_opened), enableButton = true)
+                    sendDisplay(RokidContract.DISPLAY_CLEAR)
+                    startGlassesMicrophoneIfReady()
                 }
-                else -> runOnUiThread {
-                    when {
-                        caps.at(0).string == TRANSCRIPTION_READY_EVENT -> {
-                            showStatus(
-                                getString(R.string.rokid_transcription_ready),
-                                enableButton = true,
-                            )
-                        }
-                        caps.at(0).string == AUDIO_STREAM_EVENT -> {
-                            showStatus(getString(R.string.rokid_audio_stream), enableButton = true)
-                        }
-                        caps.at(0).string == AUDIO_SIGNAL_EVENT -> {
-                            showStatus(getString(R.string.rokid_audio_signal), enableButton = true)
-                        }
-                        caps.at(0).string == AUDIO_NO_SIGNAL_EVENT -> {
-                            showStatus(getString(R.string.rokid_audio_no_signal), enableButton = true)
-                        }
-                        caps.at(0).string.startsWith("$TRANSCRIPTION_ERROR_EVENT:") -> {
-                            showStatus(
-                                caps.at(0).string.substringAfter(':'),
-                                enableButton = true,
-                            )
-                        }
-                        caps.at(0).string.startsWith(NETWORK_TEST_OK_EVENT) -> {
-                            showStatus(
-                                getString(
-                                    R.string.glasses_direct_api_ok,
-                                    caps.at(0).string.substringAfter(':', "neznámá síť"),
-                                ),
-                                enableButton = true,
-                            )
-                        }
-                        caps.at(0).string.startsWith(NETWORK_TEST_FAILED_EVENT) -> {
-                            showStatus(getString(R.string.glasses_direct_api_failed), enableButton = true)
-                        }
-                    }
-                }
+                RokidContract.INPUT_SUBMIT_EVENT -> submitTranscriptAndLoadProduct()
+                RokidContract.INPUT_EXIT_EVENT -> stopGlassesMicrophone()
             }
         }
     }
+
+    private fun startGlassesMicrophoneIfReady() {
+        if (!recognizerReady || !cxrConnected || !glassesConnected || !deviceReady) return
+        if (audioStreaming) return
+        if (!cxrLink.startAudioStream(PCM_AUDIO_CODEC)) {
+            showStatus(getString(R.string.rokid_audio_start_failed), enableButton = true)
+        }
+    }
+
+    private fun stopGlassesMicrophone() {
+        if (audioStreaming) cxrLink.stopAudioStream()
+        audioStreaming = false
+        audioBytesReceived = 0L
+        audioDataReported = false
+        audioSignalReported = false
+    }
+
+    private fun pcmPeak(data: ByteArray, offset: Int, length: Int): Int {
+        var peak = 0
+        val end = offset + length - 1
+        var index = offset
+        while (index < end) {
+            val sample = (data[index].toInt() and 0xff) or (data[index + 1].toInt() shl 8)
+            peak = maxOf(peak, kotlin.math.abs(sample.toShort().toInt()))
+            index += 2
+        }
+        return peak
+    }
+
+    private fun sendDisplay(action: String, payload: String = "") {
+        if (!cxrConnected || !glassesConnected || !deviceReady) return
+        cxrLink.sendCustomCmd(
+            RokidContract.DISPLAY_COMMAND,
+            Caps().apply { write(action) },
+            payload.toByteArray(Charsets.UTF_8),
+        )
+    }
+
+    private fun submitTranscriptAndLoadProduct() {
+        val transcript = currentTranscript.trim()
+        if (transcript.isBlank() || productPending) return
+        productPending = true
+        showStatus(getString(R.string.loading_product), enableButton = false)
+
+        ioExecutor.execute {
+            runCatching { transcriptSink.submit(transcript) }
+            runCatching { productRepository.getRandomProduct(lastProductId) }
+                .onSuccess { product ->
+                    lastProductId = product.id
+                    productCache.save(product)
+                    sendDisplay(
+                        RokidContract.DISPLAY_PRODUCT,
+                        product.toDisplayProduct().toJson(),
+                    )
+                    transcriber.reset()
+                    currentTranscript = ""
+                    lastTranscriptSent = ""
+                    productPending = false
+                    showStatus(getString(R.string.product_sent_to_glasses), enableButton = true)
+                }
+                .onFailure { error ->
+                    productPending = false
+                    showStatus(
+                        error.message ?: getString(R.string.unknown_error),
+                        enableButton = true,
+                    )
+                }
+        }
+    }
+
+    private fun FannProduct.toDisplayProduct() = DisplayProduct(
+        sku = sku,
+        name = name,
+        description = description,
+        priceWithVat = priceWithVat,
+        currency = currency,
+        character = character,
+        salesArgument = salesArgument,
+        upsellUpgrade = upsellUpgrade,
+        basketIfUpgradeDeclined = basketIfUpgradeDeclined,
+        categories = categories,
+        alternatives = alternatives,
+    )
 
     private fun showStatus(message: String, enableButton: Boolean = false) {
         runOnUiThread {
@@ -441,6 +597,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        stopGlassesMicrophone()
+        transcriber.destroy()
+        ioExecutor.shutdownNow()
         super.onDestroy()
     }
 
@@ -453,14 +612,9 @@ class MainActivity : AppCompatActivity() {
         const val DEVICE_PREFS = "rokid_device_app"
         const val DEVICE_VERSION_KEY = "installed_version"
 
-        const val EVENT_COMMAND = "cz.suku.rokidglass.event"
-        const val READY_EVENT = "ready"
-        const val TRANSCRIPTION_READY_EVENT = "transcription_ready"
-        const val AUDIO_STREAM_EVENT = "audio_stream"
-        const val AUDIO_SIGNAL_EVENT = "audio_signal"
-        const val AUDIO_NO_SIGNAL_EVENT = "audio_no_signal"
-        const val TRANSCRIPTION_ERROR_EVENT = "transcription_error"
-        const val NETWORK_TEST_OK_EVENT = "network_test_ok"
-        const val NETWORK_TEST_FAILED_EVENT = "network_test_failed"
+        const val PCM_AUDIO_CODEC = 1
+        const val PCM_SIGNAL_THRESHOLD = 500
+        const val TRANSCRIPT_UPDATE_INTERVAL_MS = 120L
+        const val AUDIO_LOG_TAG = "RokidAudio"
     }
 }

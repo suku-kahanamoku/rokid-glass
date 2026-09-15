@@ -7,10 +7,8 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import androidx.annotation.StringRes
 import cz.suku.rokidglass.device.R
-import cz.suku.rokidglass.products.FannProduct
-import cz.suku.rokidglass.transcription.TranscriptionState
+import cz.suku.rokidglass.platform.DisplayProduct
 
 class FannAssistantView(context: Context) : ScrollView(context) {
     private val transcriptText: TextView
@@ -68,12 +66,6 @@ class FannAssistantView(context: Context) : ScrollView(context) {
         addView(content)
     }
 
-    fun showConnectionStatus(message: String) = Unit
-
-    fun showTranscriptionState(state: TranscriptionState) = Unit
-
-    fun showTranscriptionError(message: String) = Unit
-
     fun showTranscript(text: String, isFinal: Boolean) {
         val transcript = text.trim()
         if (transcript.isBlank()) {
@@ -88,7 +80,7 @@ class FannAssistantView(context: Context) : ScrollView(context) {
         transcriptText.visibility = View.VISIBLE
     }
 
-    fun showProduct(product: FannProduct) {
+    fun showProduct(product: DisplayProduct) {
         transcriptText.text = ""
         transcriptText.visibility = View.GONE
 
@@ -123,11 +115,9 @@ class FannAssistantView(context: Context) : ScrollView(context) {
         }
     }
 
-    fun showProductError() = Unit
-
-    fun showMicrophonePermissionRequired() = Unit
-
-    fun setHint(@StringRes stringResource: Int) = Unit
-
-    fun setHint(message: String) = Unit
+    fun clear() {
+        transcriptText.text = ""
+        transcriptText.visibility = View.INVISIBLE
+        productViews.forEach { it.visibility = View.GONE }
+    }
 }

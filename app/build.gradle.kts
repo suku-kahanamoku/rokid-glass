@@ -81,8 +81,8 @@ android {
         applicationId = "cz.suku.rokidglass"
         minSdk = 31
         targetSdk = 36
-        versionCode = 8
-        versionName = "1.7"
+        versionCode = 9
+        versionName = "1.8"
     }
 
     signingConfigs {
@@ -161,4 +161,7 @@ kotlin {
 dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.rokid.cxr:client-l:1.1.1")
+    implementation(project(":modules:glasses-platform"))
+    implementation(project(":modules:products"))
+    implementation(project(":modules:transcription"))
 }

@@ -28,6 +28,13 @@
     <string name="rokid_audio_stream">Mikrofon brýlí posílá audio data.</string>
     <string name="rokid_audio_signal">Mikrofon brýlí zachytil hlas nebo jiný zvuk.</string>
     <string name="rokid_audio_no_signal">Mikrofon posílá data, ale zatím v nich není slyšitelný signál.</string>
+    <string name="phone_transcription_ready">Český přepis v telefonu je připravený.</string>
+    <string name="rokid_phone_listening">Telefon poslouchá mikrofon brýlí a převádí řeč na text.</string>
+    <string name="rokid_audio_stopped">Přenos mikrofonu brýlí byl zastaven.</string>
+    <string name="rokid_audio_start_failed">Mikrofonní stream z brýlí se nepodařilo spustit.</string>
+    <string name="rokid_audio_error">Chyba mikrofonního streamu: %1$s</string>
+    <string name="loading_product">Načítám produkt v telefonu…</string>
+    <string name="product_sent_to_glasses">Produkt byl odeslán do brýlí.</string>
     <string name="rokid_device_app_start_failed">Aplikaci v brýlích se nepodařilo spustit.</string>
     <string name="rokid_stopping_device_app">Zastavuji aplikaci v brýlích…</string>
     <string name="rokid_device_app_stopped">Aplikace v brýlích byla zastavena.</string>
