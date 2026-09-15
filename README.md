@@ -154,8 +154,11 @@ APK nahraje do brýlí telefonní aplikace přes CXR-L.
 10. Telefon spustí audio stream z mikrofonu brýlí a lokální český přepis.
 11. Začni mluvit; v brýlích se zobrazí pouze zachycený text.
 
-Telefonní aplikaci během práce s asistentem neukončuj ani násilně neodstraňuj z
-běžících aplikací. Bez telefonu se zastaví přepis, API i reakce na boční vstupy.
+Po prvním spuštění a autorizaci můžeš telefonní obrazovku zavřít nebo odstranit z
+posledních aplikací. CXR spojení, Vosk, přepis a produktová logika zůstávají ve
+foreground službě s trvalým oznámením. Androidí volba **Vynutit ukončení**,
+restart telefonu nebo ruční zastavení služby relaci ukončí; poté je nutné
+telefonní aplikaci jednou znovu otevřít a připojit.
 
 Telefonní obrazovka obsahuje také tlačítko pro zastavení device aplikace a
 potvrzované tlačítko pro její odinstalaci. Odinstalace odstraní jen balíček
@@ -330,13 +333,25 @@ Po otevření FAnn asistenta:
    potvrzení aktuálního přepisu;
 7. telefon předá snapshot textu nakonfigurovanému `TranscriptSink` a modul
    `products` vybere jiný náhodný publikovaný produkt;
-8. telefon pošle prezentační data produktu do brýlí, které je pouze vykreslí, a
-   přepis se připraví na další rozhovor.
+8. telefon zastaví mikrofonní stream i přepis a pošle prezentační data produktu
+   do brýlí, které je pouze vykreslí;
+9. další kliknutí nebo posun na zobrazeném produktu produkt skryje, vyčistí
+   předchozí přepis a znovu spustí mikrofonní stream a nový přepis.
 
 Dvojklik aplikaci ukončí. Pro boční dotykovou plochu se zpracovávají
 `KEYCODE_ENTER`, `KEYCODE_DPAD_RIGHT` a `KEYCODE_DPAD_LEFT`. Krátký debounce a
 blokace probíhajícího požadavku zabraňují tomu, aby jeden fyzický posun načetl
 více produktů.
+
+Asistent má tři interní režimy: `LISTENING`, `LOADING_PRODUCT` a
+`SHOWING_PRODUCT`. V režimu produktu se žádné audio nezpracovává. Jeden boční
+vstup vždy provede pouze jeden přechod: přepis → produkt, nebo produkt → nový
+přepis.
+
+V režimu `LISTENING` drží device aktivita displej brýlí zapnutý pomocí
+`FLAG_KEEP_SCREEN_ON`, a to i když zatím nebyla rozpoznána žádná slova. Při
+zobrazení produktu se tento příznak uvolní a brýle se mohou po systémovém limitu
+opět uspat. Ukončení nebo opuštění aplikace příznak také vždy odstraní.
 
 Přepis nepoužívá cloudovou rozpoznávací službu ani Rokid AK/SK: Vosk běží
 offline v telefonu. Audio však přes CXR-L putuje z mikrofonu brýlí do telefonu a
@@ -344,6 +359,10 @@ text putuje zpět. Internet v telefonu je potřeba až pro odeslání transkripc
 neprázdné testovací URL a pro načtení produktu. Původní systémový Android
 `SpeechRecognizer` zůstává v modulu pouze jako alternativní implementace;
 aktuální tok jej nepoužívá.
+
+Interní Vosk tokeny `[unk]` a `<unk>` označující nerozpoznaný zvuk se před
+zobrazením normalizují na prázdné místo. Samotné tyto tokeny se proto do brýlí
+ani do testovacího požadavku neposílají.
 
 ## Testovací URL pro transkripci
 
@@ -405,10 +424,12 @@ aktuální přepis a `input_exit` zastaví mikrofonní stream. Telefon posílá 
 obrazovku, průběžný přepis nebo serializovaný `DisplayProduct`; brýle neznají API
 model `FannProduct`.
 
-Telefon používá foreground service s trvalým oznámením pro viditelné CXR
-spojení. Aktuální řídicí relace, přepis a produktová logika žijí v telefonní
-`MainActivity`, takže její násilné ukončení relaci ukončí. Device aplikace může
-zůstat otevřená, ale bez telefonu nemá zdroj nového obsahu.
+Telefon používá foreground service s trvalým oznámením. `RokidController`, CXR
+relace, Vosk přepis i produktová logika jsou vlastněné touto službou;
+`PhoneActivity` je pouze připojené uživatelské ovládání. Zavření obrazovky nebo
+její odstranění z posledních aplikací proto běžící relaci nepřeruší. Device
+aplikace může zůstat otevřená, ale bez běžící telefonní služby nemá zdroj nového
+obsahu.
 
 ## Diagnostika
 

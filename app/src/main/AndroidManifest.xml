@@ -25,7 +25,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.RokidGlass">
         <activity
-            android:name=".MainActivity"
+            android:name=".PhoneActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

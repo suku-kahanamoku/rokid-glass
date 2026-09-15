@@ -107,7 +107,7 @@ class VoskPcmStreamTranscriber(
     }
 
     private fun String?.value(key: String): String = runCatching {
-        JSONObject(orEmpty()).optString(key).trim()
+        sanitizeRecognizerText(JSONObject(orEmpty()).optString(key))
     }.getOrDefault("")
 
     private fun combine(first: String, second: String): String =
@@ -129,3 +129,8 @@ class VoskPcmStreamTranscriber(
         const val MODEL_STORAGE_PATH = "vosk-phone"
     }
 }
+
+internal fun sanitizeRecognizerText(text: String): String = text
+    .replace(Regex("(?i)(?:\\[unk]|<unk>)"), " ")
+    .replace(Regex("\\s+"), " ")
+    .trim()

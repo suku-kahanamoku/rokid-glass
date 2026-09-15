@@ -5,6 +5,7 @@ import android.content.IntentFilter
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.KeyEvent
+import android.view.WindowManager
 import androidx.core.content.ContextCompat
 import cz.suku.rokidglass.device.ui.FannAssistantView
 import cz.suku.rokidglass.platform.DisplayProduct
@@ -27,11 +28,20 @@ class MainActivity : Activity() {
         override fun onDisplayCommand(action: String, payload: String) {
             runOnUiThread {
                 when (action) {
-                    RokidContract.DISPLAY_CLEAR -> screen.clear()
-                    RokidContract.DISPLAY_TRANSCRIPT -> screen.showTranscript(payload, false)
+                    RokidContract.DISPLAY_CLEAR -> {
+                        keepDisplayAwake(true)
+                        screen.clear()
+                    }
+                    RokidContract.DISPLAY_TRANSCRIPT -> {
+                        keepDisplayAwake(true)
+                        screen.showTranscript(payload, false)
+                    }
                     RokidContract.DISPLAY_PRODUCT -> runCatching {
                         DisplayProduct.fromJson(payload)
-                    }.onSuccess(screen::showProduct)
+                    }.onSuccess {
+                        keepDisplayAwake(false)
+                        screen.showProduct(it)
+                    }
                 }
             }
         }
@@ -41,6 +51,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         screen = FannAssistantView(this)
         setContentView(screen)
+        keepDisplayAwake(true)
 
         ContextCompat.registerReceiver(
             this,
@@ -55,12 +66,23 @@ class MainActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
+        keepDisplayAwake(true)
         RokidSession.attach(sessionListener)
     }
 
     override fun onStop() {
+        keepDisplayAwake(false)
         RokidSession.detach(sessionListener)
         super.onStop()
+    }
+
+    private fun keepDisplayAwake(enabled: Boolean) {
+        screen.keepScreenOn = enabled
+        if (enabled) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
     }
 
     private fun handleGlassInput(input: GlassInput) {

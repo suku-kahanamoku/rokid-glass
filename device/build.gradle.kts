@@ -52,8 +52,8 @@ android {
         applicationId = "cz.suku.rokidglass.device"
         minSdk = 31
         targetSdk = 36
-        versionCode = 18
-        versionName = "1.17"
+        versionCode = 19
+        versionName = "1.18"
     }
 
     signingConfigs {

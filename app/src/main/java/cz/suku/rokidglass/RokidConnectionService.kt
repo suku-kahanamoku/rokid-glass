@@ -6,9 +6,19 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.os.Binder
 import android.os.IBinder
 
 class RokidConnectionService : Service() {
+    inner class LocalBinder : Binder() {
+        val service: RokidConnectionService
+            get() = this@RokidConnectionService
+    }
+
+    private val binder = LocalBinder()
+    lateinit var controller: RokidController
+        private set
+
     override fun onCreate() {
         super.onCreate()
 
@@ -24,7 +34,7 @@ class RokidConnectionService : Service() {
         val openAppIntent = PendingIntent.getActivity(
             this,
             0,
-            Intent(this, MainActivity::class.java),
+            Intent(this, PhoneActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val notification = android.app.Notification.Builder(this, CHANNEL_ID)
@@ -40,11 +50,18 @@ class RokidConnectionService : Service() {
             notification,
             ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
         )
+        controller = RokidController(applicationContext)
+        controller.start()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
-    override fun onBind(intent: Intent?): IBinder? = null
+    override fun onBind(intent: Intent?): IBinder = binder
+
+    override fun onDestroy() {
+        controller.destroy()
+        super.onDestroy()
+    }
 
     private companion object {
         const val CHANNEL_ID = "rokid_connection"
