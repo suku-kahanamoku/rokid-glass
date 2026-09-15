@@ -1,13 +1,27 @@
 <resources>
-    <string name="direct_api_ok">Přímé API funguje (%1$s)</string>
-    <string name="direct_api_failed">Přímé API nefunguje (%1$s): %2$s</string>
-    <string name="app_name">FAnn profily</string>
+    <string name="direct_api_ok">Produktové API funguje (%1$s)</string>
+    <string name="direct_api_failed">Produktové API nefunguje (%1$s): %2$s</string>
+    <string name="app_name">FAnn asistent</string>
     <string name="standalone_mode">Samostatný režim</string>
-    <string name="waiting_for_phone">Načítám první profil…</string>
-    <string name="swipe_hint">Posuň dopředu: další • dozadu: předchozí • dvojklik: zavřít</string>
-    <string name="loading_profile">Načítám profil…</string>
-    <string name="profile_load_failed">Profil se nepodařilo načíst</string>
-    <string name="retry_hint">Zkontroluj Wi-Fi a posunem načítání opakuj • dvojklik: zavřít</string>
-    <string name="profile_label">FANN PROFIL</string>
-    <string name="profile_label_number">FANN PROFIL %1$d</string>
+    <string name="microphone_permission_required">Povol mikrofon pro přepis řeči</string>
+    <string name="transcription_starting">Spouštím rozpoznávání řeči…</string>
+    <string name="transcription_listening">Poslouchám…</string>
+    <string name="transcription_paused">Rozpoznávání je pozastavené</string>
+    <string name="transcription_unavailable">Rozpoznávání řeči není dostupné</string>
+    <string name="transcript_label">PŘEPIS ROZHOVORU</string>
+    <string name="transcript_empty">Začni mluvit…</string>
+    <string name="product_label">DOPORUČENÝ PRODUKT</string>
+    <string name="waiting_for_product">Klikni nebo posuň boční plochu</string>
+    <string name="loading_product">Odesílám přepis a vybírám produkt…</string>
+    <string name="product_load_failed">Produkt se nepodařilo načíst</string>
+    <string name="interaction_hint">Kliknutí nebo posun: doporučit produkt • dvojklik: zavřít</string>
+    <string name="retry_hint">Zkontroluj Wi-Fi a kliknutím nebo posunem akci opakuj</string>
+    <string name="product_meta">%1$s • %2$s</string>
+    <string name="product_price">Cena s DPH: %1$s %2$s</string>
+    <string name="product_character">Charakter: %1$s</string>
+    <string name="product_sales_argument">Argument: %1$s</string>
+    <string name="product_upsell">Vyšší varianta: %1$s</string>
+    <string name="product_basket">Doplněk: %1$s</string>
+    <string name="product_alternatives">Alternativy: %1$s</string>
+    <string name="test_sink_disabled">Testovací URL je zatím prázdná; přepis se neodeslal</string>
 </resources>

@@ -1,19 +1,26 @@
 # Rokid Glass
 
-Dvojice Android aplikací, která zobrazuje profily z FAnn CRM přímo v consumer
-Rokid Glasses.
+Modulární dvojice Android aplikací pro FAnn asistenta v consumer Rokid Glasses.
+Brýle průběžně převádějí českou řeč na text a po kliknutí nebo posunu boční
+dotykové plochy zobrazí náhodný produkt z FAnn CRM.
 
 ```text
 rokid-glass/
-├── app/       telefonní aplikace
-└── device/    aplikace v brýlích
+├── app/                         telefonní aplikace
+├── device/                      spustitelná aplikace v brýlích
+└── modules/
+    ├── glasses-platform/        Rokid spojení a boční vstupy
+    ├── products/                produktové API, modely a cache
+    └── transcription/           přepis řeči a odeslání transkripce
 
 app -> Hi Rokid / CXR-L CUSTOMAPP -> device
 ```
 
-Telefon instaluje, aktualizuje a spouští device APK v brýlích. Device aplikace
-se potom přes Wi-Fi připojuje k FAnn API sama, profil vykreslí, posunem dopředu
-nebo dozadu listuje profily a dvojklikem se zavře do hlavního menu brýlí.
+Telefon instaluje, aktualizuje a spouští device APK v brýlích. Potom už device
+aplikace používá mikrofon brýlí a český offline model samostatně. Wi-Fi potřebuje
+jen pro načtení produktů. Kliknutí, posun dopředu i
+posun dozadu odešlou aktuální přepis a vyberou produkt; dvojklik aplikaci zavře
+do hlavního menu brýlí.
 
 ## Moduly
 
@@ -23,9 +30,15 @@ nebo dozadu listuje profily a dvojklikem se zavře do hlavního menu brýlí.
 
 - `app`: telefonní aplikace, balíček `cz.suku.rokidglass`;
 - `device`: aplikace v brýlích, balíček
-  `cz.suku.rokidglass.device`.
+  `cz.suku.rokidglass.device`; obsahuje životní cyklus a sestavení obrazovky;
+- `modules:glasses-platform`: `RokidSession`, diagnostické zprávy a sjednocení
+  fyzického tlačítka i boční dotykové plochy;
+- `modules:products`: model produktu, parser, veřejné FAnn API, náhodný výběr a
+  lokální cache posledního produktu;
+- `modules:transcription`: výměnné rozhraní přepisu řeči, lokální Vosk
+  implementace s českým modelem a výměnný HTTP odesílač transkripce.
 
-Telefon používá `com.rokid.cxr:client-l:1.1.1`. Device aplikace používá
+Telefon používá `com.rokid.cxr:client-l:1.1.1`. Modul `glasses-platform` používá
 `com.rokid.cxr:cxr-service-bridge:1.0-20260715.121510-107`, tedy stejnou bridge
 verzi, kterou přináší telefonní CXR-L klient.
 
@@ -35,7 +48,9 @@ verzi, kterou přináší telefonní CXR-L klient.
 - Android SDK Platform 36;
 - Android telefon s Androidem 12 / API 31 nebo novějším;
 - aplikace Hi Rokid přihlášená a spárovaná s brýlemi;
-- Bluetooth pro instalaci a spuštění, Wi-Fi v brýlích pro načítání profilů;
+- Bluetooth pro instalaci a spuštění, Wi-Fi v brýlích pouze pro načítání
+  produktů;
+- povolený mikrofon pro FAnn asistenta v brýlích;
 - USB ladění v telefonu pro instalaci telefonní APK.
 
 Pokud Android SDK není automaticky nalezené, vytvoř v kořeni projektu lokální,
@@ -64,6 +79,12 @@ Gradle automaticky provede tento řetězec:
 :app:assembleDebug
 ```
 
+Při prvním sestavení modul `transcription` stáhne český model
+`vosk-model-small-cs-0.4-rhasspy` (přibližně 46 MB), ověří jeho SHA-256 a vloží
+ho do device APK. Archiv se ukládá jen do lokální `.gradle/vosk-models/` cache a
+do Gitu se neukládá. Při prvním spuštění nové device verze brýle model jednou
+rozbalí; zelená obrazovka proto může několik sekund zůstat prázdná.
+
 Výsledky:
 
 ```text
@@ -79,10 +100,18 @@ Gitu. Kompatibilní pomocný příkaz, který navíc spustí device lint:
 ./scripts/embed-device-apk.sh
 ```
 
-Kompletní kontrola obou modulů:
+Kompletní kontrola všech modulů:
 
 ```bash
-./gradlew :device:lintDebug :app:lintDebug :app:assembleDebug
+./gradlew \
+  :modules:glasses-platform:lintDebug \
+  :modules:products:testDebugUnitTest \
+  :modules:products:lintDebug \
+  :modules:transcription:testDebugUnitTest \
+  :modules:transcription:lintDebug \
+  :device:lintDebug \
+  :app:lintDebug \
+  :app:assembleDebug
 ```
 
 ## Instalace telefonní aplikace
@@ -115,7 +144,8 @@ APK nahraje do brýlí telefonní aplikace přes CXR-L.
 7. Telefon ověří instalaci device APK.
 8. Pokud chybí nebo se změnila její verze, nahraje ji do brýlí.
 9. Telefon device aplikaci spustí a počká na zprávu `ready`.
-10. Device aplikace si sama načte profil z FAnn API přes Wi-Fi brýlí.
+10. V brýlích povol aplikaci přístup k mikrofonu.
+11. Jakmile se zobrazí `Poslouchám…`, začni mluvit.
 
 Telefonní obrazovka obsahuje také tlačítko pro zastavení device aplikace a
 potvrzované tlačítko pro její odinstalaci. Odinstalace odstraní jen balíček
@@ -126,7 +156,7 @@ Instalace do brýlí tedy probíhá přes telefon, Hi Rokid a
 
 ## Aktualizace device aplikace
 
-Po změně modulu `device`:
+Po změně modulu `device` nebo kteréhokoliv modulu, který používají brýle:
 
 1. zvyš `versionCode` v `device/build.gradle.kts`;
 2. znovu sestav a nainstaluj telefonní modul příkazem
@@ -161,8 +191,9 @@ versionCode = 3
 versionName = "1.2"
 ```
 
-Pokud se změnil také modul `device`, zvyš jeho vlastní `versionCode` a
-`versionName` v `device/build.gradle.kts`, například:
+Pokud se změnil modul `device` nebo některý z modulů používaných brýlemi, zvyš
+také jeho vlastní `versionCode` a `versionName` v `device/build.gradle.kts`,
+například:
 
 ```kotlin
 versionCode = 12
@@ -173,7 +204,7 @@ Platí:
 
 - změna pouze telefonní aplikace: zvyš jen verzi `app`;
 - změna aplikace v brýlích: zvyš verzi `app` i `device`;
-- změna pouze profilů nebo dat na backendu: Android deploy není potřeba.
+- změna pouze produktů nebo jiných dat na backendu: Android deploy není potřeba.
 
 ### 2. Release keystore
 
@@ -201,7 +232,13 @@ V kořeni projektu spusť:
 
 ```bash
 cd /home/suku/Workspace/rokid-glass
-./gradlew :app:lintRelease :device:lintRelease :app:bundleRelease
+./gradlew \
+  :modules:glasses-platform:lintRelease \
+  :modules:products:lintRelease \
+  :modules:transcription:lintRelease \
+  :device:lintRelease \
+  :app:lintRelease \
+  :app:bundleRelease
 ```
 
 Příkaz automaticky:
@@ -269,30 +306,76 @@ Rollback se provádí jako nové vydání: sestav starší funkční zdrojový k
 nastav mu vyšší `versionCode`. Google Play ani Android běžně nepovolí instalaci
 balíčku s nižším číslem verze.
 
-## Samostatný provoz a FAnn CRM API
+## Přepis řeči a doporučení produktu
 
-Device aplikace v brýlích bez přihlášení načítá produkční ID `11..20`
-chronologicky a volá například:
+Po otevření FAnn asistenta:
+
+1. aplikace požádá o oprávnění mikrofonu;
+2. modul `transcription` rozbalí český Vosk model a spustí lokální poslech
+   mikrofonu v brýlích;
+3. úvodní obrazovka je prázdná a až skutečně zachycená průběžná nebo finální transkripce se zobrazí v brýlích;
+4. kliknutí nebo posun boční plochy v libovolném směru pořídí snapshot textu;
+5. transkripce se předá nakonfigurovanému `TranscriptSink`;
+6. modul `products` vybere jiný náhodný publikovaný produkt;
+7. teprve po dokončení požadavku aplikace skryje přepis, zobrazí produkt a znovu začne poslouchat další rozhovor.
+
+Dvojklik aplikaci ukončí. Pro boční dotykovou plochu se zpracovávají
+`KEYCODE_ENTER`, `KEYCODE_DPAD_RIGHT` a `KEYCODE_DPAD_LEFT`. Krátký debounce a
+blokace probíhajícího požadavku zabraňují tomu, aby jeden fyzický posun načetl
+více produktů.
+
+Na fyzických brýlích přepis používá Vosk přímo nad lokálním mikrofonem při
+16 kHz. Průběžné i dokončené věty se zobrazují bez odesílání audia nebo textu do
+telefonu či cloudové rozpoznávací služby. Aplikace tedy pro přepis nepotřebuje
+Rokid AK/SK, Hi Rokid hlasovou autorizaci ani připojení k internetu. Původní
+systémový Android `SpeechRecognizer` zůstává v modulu pouze jako případná
+záložní implementace pro obyčejný Android; device aplikace jej nepoužívá.
+
+## Testovací URL pro transkripci
+
+Výchozí URL je záměrně prázdná v:
 
 ```text
-https://fann-crm.netlify.app/api/admin/profile/11
+modules/transcription/src/main/java/cz/suku/rokidglass/transcription/TranscriptionConfig.kt
 ```
 
-Při prvním spuštění začne ID `11`. Posun dopředu používá pořadí
-`11 → 12 → … → 20 → 11`, posun dozadu opačné pořadí. Aplikace zobrazuje:
+Proto se nyní text neposílá mimo brýle a `HttpTranscriptSink` vrací úspěšný
+no-op stav. Až bude cílové API připravené, nastav například:
 
-- číslo a název profilu;
-- potřebu zákazníka;
-- první tři prodejní otázky;
-- první dvě námitky.
+```kotlin
+const val TRANSCRIPT_ENDPOINT = "https://example.test/api/transcript"
+```
 
-Neplatné, nepublikované nebo nedostupné ID aplikace přeskočí. Poslední úspěšně
-načtený profil ukládá přímo v brýlích. Po novém otevření jej ihned zobrazí a na
-pozadí se jej pokusí aktualizovat. Při výpadku Wi-Fi zůstane uložený profil
-zobrazený a posun lze po obnovení připojení zopakovat.
+Odesílač provede `POST` s JSON tělem:
 
-Po úspěšné instalaci a prvním spuštění už telefon není pro zobrazování ani
-listování profilů potřeba. Brýle ale musí mít přístup k Wi-Fi.
+```json
+{
+  "transcript": "Hledám lehkou večerní vůni"
+}
+```
+
+## FAnn produktové API
+
+Produktový modul komunikuje bez přihlášení s:
+
+```text
+GET https://fann-crm.netlify.app/api/admin/product?limit=100
+GET https://fann-crm.netlify.app/api/admin/product/{id}
+```
+
+První endpoint poskytne katalog pro náhodný výběr, druhý načte aktuální detail
+vybraného produktu. Aplikace zobrazuje název, SKU, kategorii, cenu s DPH, popis,
+charakter, hlavní prodejní argument, vyšší variantu, doplněk a alternativy.
+Nepublikované produkty se nepoužijí a pokud je v katalogu více možností,
+bezprostředně předchozí produkt se znovu nevybere.
+
+Poslední úspěšný produkt je uložený v cache pouze kvůli tomu, aby se při dalším
+výběru neopakoval. Po novém spuštění se cache na obrazovce nezobrazuje; obrazovka
+zůstane prázdná až do zachycení řeči.
+
+Po úspěšné instalaci telefon není pro přepis ani načítání produktů potřeba.
+Samotný přepis funguje offline; Wi-Fi v brýlích je nutná až pro následné načtení
+produktu z FAnn API.
 
 ## Komunikační protokol
 
@@ -301,13 +384,13 @@ cz.suku.rokidglass.event
     brýle -> telefon, diagnostická hodnota ready nebo stav přímého API
 ```
 
-`ready` potvrzuje telefonu, že device aplikace běží. Profil ani příkazy pro
-listování se přes telefon neposílají. Posun zpracuje device aplikace přímo a
-dvojklik ukončí její Activity a vrátí systémové hlavní menu brýlí.
+`ready` potvrzuje telefonu, že device aplikace běží. Diagnostika může dále poslat
+`transcription_ready`, `product_loaded:{id}` nebo stav chyby sítě. Transkripce,
+produkty ani příkazy bočního ovládání se přes telefon neposílají.
 
 Telefon používá foreground service s trvalým oznámením pouze pro správu CXR
-spojení. Ukončení telefonní aplikace nemá vliv na načítání ani listování profilů
-v již nainstalované device aplikaci.
+spojení. Ukončení telefonní aplikace nemá vliv na přepis ani načítání produktů v
+již nainstalované device aplikaci.
 
 ## Diagnostika
 
@@ -324,10 +407,12 @@ autorizační token.
 
 ## Co lze ověřit bez fyzických brýlí
 
-- kompilaci obou modulů;
+- kompilaci všech Gradle modulů;
+- jednotkové testy parsování produktového API a prázdného transcript sinku;
 - Android lint;
 - zabalení device APK uvnitř telefonní APK;
 - identitu, verzi a podpis APK.
 
-Instalaci přes `appUploadAndInstall()`, spuštění přes `appStart()`, vykreslení a
-přesně jedno fyzické klepnutí lze potvrdit až s připojeným telefonem a brýlemi.
+Instalaci přes `appUploadAndInstall()`, spuštění přes `appStart()`, dostupnost
+mikrofonní recognition služby, reálný přepis a fyzické boční vstupy lze potvrdit
+až s připojeným telefonem a brýlemi.

@@ -1,4 +1,4 @@
-package cz.suku.rokidglass.device
+package cz.suku.rokidglass.platform
 
 import com.rokid.cxr.CXRServiceBridge
 import com.rokid.cxr.Caps
@@ -33,7 +33,6 @@ object RokidSession {
             override fun onRokidAccountChanged(account: String?) = Unit
             override fun onAudioNoise(value: Float) = Unit
         })
-
     }
 
     fun attach(listener: Listener) {
@@ -46,7 +45,7 @@ object RokidSession {
     }
 
     fun sendEvent(event: String): Int = bridge.sendMessage(
-        ProfileContract.EVENT_COMMAND,
+        RokidContract.EVENT_COMMAND,
         Caps().apply { write(event) },
     )
 }

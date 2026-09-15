@@ -9,5 +9,6 @@ captures/
 .cxx/
 app/build/
 device/build/
+/modules/**/build/
 /app/release/
 /device/release/

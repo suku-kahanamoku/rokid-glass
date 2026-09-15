@@ -52,8 +52,8 @@ android {
         applicationId = "cz.suku.rokidglass.device"
         minSdk = 31
         targetSdk = 36
-        versionCode = 11
-        versionName = "1.10"
+        versionCode = 17
+        versionName = "1.16"
     }
 
     signingConfigs {
@@ -84,6 +84,7 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
 }
 
 tasks.matching { it.name == "preReleaseBuild" }.configureEach {
@@ -98,5 +99,7 @@ kotlin {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.10.1")
-    implementation("com.rokid.cxr:cxr-service-bridge:1.0-20260715.121510-107")
+    implementation(project(":modules:glasses-platform"))
+    implementation(project(":modules:products"))
+    implementation(project(":modules:transcription"))
 }

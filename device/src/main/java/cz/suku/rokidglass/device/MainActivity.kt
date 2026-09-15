@@ -1,67 +1,104 @@
 package cz.suku.rokidglass.device
 
+import android.Manifest
 import android.app.Activity
 import android.content.IntentFilter
-import android.graphics.Color
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Bundle
-import android.view.Gravity
+import android.os.SystemClock
 import android.view.KeyEvent
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
 import androidx.core.content.ContextCompat
-import org.json.JSONArray
-import org.json.JSONObject
-import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
+import cz.suku.rokidglass.device.ui.FannAssistantView
+import cz.suku.rokidglass.platform.GlassInput
+import cz.suku.rokidglass.platform.GlassInputReceiver
+import cz.suku.rokidglass.platform.RokidContract
+import cz.suku.rokidglass.platform.RokidSession
+import cz.suku.rokidglass.products.FannProduct
+import cz.suku.rokidglass.products.FannProductRepository
+import cz.suku.rokidglass.products.ProductCache
+import cz.suku.rokidglass.products.ProductRepository
+import cz.suku.rokidglass.transcription.HttpTranscriptSink
+import cz.suku.rokidglass.transcription.AudioInputState
+import cz.suku.rokidglass.transcription.SpeechTranscriber
+import cz.suku.rokidglass.transcription.TranscriptSink
+import cz.suku.rokidglass.transcription.TranscriptionState
+import cz.suku.rokidglass.transcription.VoskSpeechTranscriber
 import java.util.concurrent.Executors
 
 class MainActivity : Activity() {
-    private lateinit var connectionStatus: TextView
-    private lateinit var profileLabel: TextView
-    private lateinit var profileName: TextView
-    private lateinit var selectionNeed: TextView
-    private lateinit var questions: TextView
-    private lateinit var objections: TextView
-    private lateinit var hint: TextView
-
-    private var cxrConnected = false
-    @Volatile private var navigationPending = false
-    @Volatile private var lastProfileId: Int? = null
+    private lateinit var screen: FannAssistantView
+    private lateinit var speechTranscriber: SpeechTranscriber
+    private lateinit var productCache: ProductCache
+    private val productRepository: ProductRepository = FannProductRepository()
+    private val transcriptSink: TranscriptSink = HttpTranscriptSink()
     private val ioExecutor = Executors.newSingleThreadExecutor()
-    private val keyReceiver = KeyReceiver(::handleGlassInput)
+    private val inputReceiver = GlassInputReceiver(::handleGlassInput)
+
+    @Volatile private var productPending = false
+    @Volatile private var lastProductId: Int? = null
+    private var currentTranscript = ""
+    private var cxrConnected = false
+    private var lastSubmitAt = 0L
 
     private val sessionListener = object : RokidSession.Listener {
         override fun onConnectionChanged(connected: Boolean) {
             cxrConnected = connected
-            if (connected) RokidSession.sendEvent(ProfileContract.READY_EVENT)
+            if (connected) RokidSession.sendEvent(RokidContract.READY_EVENT)
+        }
+    }
+
+    private val transcriptionListener = object : SpeechTranscriber.Listener {
+        override fun onStateChanged(state: TranscriptionState) {
+            runOnUiThread { screen.showTranscriptionState(state) }
+            if (state == TranscriptionState.LISTENING && cxrConnected) {
+                RokidSession.sendEvent(RokidContract.TRANSCRIPTION_READY_EVENT)
+            }
+        }
+
+        override fun onTranscriptChanged(text: String, isFinal: Boolean) {
+            runOnUiThread {
+                currentTranscript = text
+                screen.showTranscript(text, isFinal)
+            }
+        }
+
+        override fun onError(message: String) {
+            runOnUiThread { screen.showTranscriptionError(message) }
+            sendDiagnosticEvent("${RokidContract.TRANSCRIPTION_ERROR_EVENT}:$message")
+        }
+
+        override fun onAudioInputChanged(state: AudioInputState) {
+            val event = when (state) {
+                AudioInputState.STREAMING -> RokidContract.AUDIO_STREAM_EVENT
+                AudioInputState.SIGNAL_DETECTED -> RokidContract.AUDIO_SIGNAL_EVENT
+                AudioInputState.NO_SIGNAL -> RokidContract.AUDIO_NO_SIGNAL_EVENT
+            }
+            sendDiagnosticEvent(event)
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(createContentView())
+        screen = FannAssistantView(this)
+        setContentView(screen)
 
-        val cachedProfile = getSharedPreferences(PROFILE_PREFS, MODE_PRIVATE)
-            .getString(PROFILE_JSON_KEY, null)
-            ?.let { json -> runCatching { JSONObject(json) }.getOrNull() }
-        cachedProfile?.let(::showProfile)
+        productCache = ProductCache(this)
+        lastProductId = productCache.load()?.id
+        speechTranscriber = VoskSpeechTranscriber(this, transcriptionListener)
 
         ContextCompat.registerReceiver(
             this,
-            keyReceiver,
+            inputReceiver,
             IntentFilter().apply {
-                KeyReceiver.ACTIONS.forEach(::addAction)
+                GlassInputReceiver.actions.forEach(::addAction)
+                priority = 100
             },
             ContextCompat.RECEIVER_EXPORTED,
         )
 
-        loadProfile(
-            direction = if (cachedProfile == null) null else ProfileDirection.CURRENT,
-        )
+        ensureMicrophonePermission()
     }
 
     override fun onStart() {
@@ -69,252 +106,143 @@ class MainActivity : Activity() {
         RokidSession.attach(sessionListener)
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (hasMicrophonePermission()) speechTranscriber.start()
+    }
+
+    override fun onPause() {
+        speechTranscriber.stop()
+        super.onPause()
+    }
+
     override fun onStop() {
         RokidSession.detach(sessionListener)
         super.onStop()
     }
 
-    private fun createContentView(): ScrollView {
-        val density = resources.displayMetrics.density
-        val horizontalPadding = (28 * density).toInt()
-        val verticalPadding = (18 * density).toInt()
-
-        fun text(size: Float, color: Int, bold: Boolean = false) = TextView(this).apply {
-            textSize = size
-            setTextColor(color)
-            gravity = Gravity.CENTER
-            if (bold) setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
-        }
-
-        connectionStatus = text(11f, Color.rgb(105, 217, 154)).apply {
-            setText(R.string.standalone_mode)
-        }
-        profileLabel = text(12f, Color.rgb(105, 217, 154), bold = true).apply {
-            setText(R.string.profile_label)
-        }
-        profileName = text(22f, Color.WHITE, bold = true).apply {
-            setText(R.string.waiting_for_phone)
-        }
-        selectionNeed = text(16f, Color.rgb(232, 245, 236))
-        questions = text(14f, Color.rgb(185, 200, 190))
-        objections = text(13f, Color.rgb(255, 209, 102))
-        hint = text(11f, Color.rgb(105, 217, 154)).apply {
-            setText(R.string.swipe_hint)
-        }
-
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
-            setBackgroundColor(Color.rgb(7, 19, 12))
-            addView(connectionStatus)
-            addView(profileLabel)
-            addView(profileName)
-            addView(selectionNeed)
-            addView(questions)
-            addView(objections)
-            addView(hint)
-        }
-
-        return ScrollView(this).apply {
-            isFillViewport = true
-            setBackgroundColor(Color.rgb(7, 19, 12))
-            addView(content)
+    private fun ensureMicrophonePermission() {
+        if (hasMicrophonePermission()) {
+            speechTranscriber.start()
+        } else {
+            screen.showMicrophonePermissionRequired()
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_RECORD_AUDIO)
         }
     }
 
-    private fun showProfile(profile: JSONObject) {
-        profile.optInt("id").takeIf { it in FANN_PROFILE_IDS }?.let { lastProfileId = it }
-        runOnUiThread {
-            navigationPending = false
-            val number = profile.optInt("profileNumber")
-            profileLabel.text = if (number > 0) {
-                getString(R.string.profile_label_number, number)
-            } else {
-                getString(R.string.profile_label)
-            }
-            profileName.text = profile.optString("name", "FAnn zákazník")
-            selectionNeed.text = profile.optString("selectionNeed")
-            questions.text = profile.optJSONArray("questions")
-                ?.let { values ->
-                    buildList {
-                        for (index in 0 until values.length()) {
-                            values.optString(index)
-                                .takeIf { it.isNotBlank() }
-                                ?.let { add("${index + 1}. $it") }
-                        }
-                    }
-                }
-                .orEmpty()
-                .joinToString("\n")
-            objections.text = profile.optJSONArray("objections")
-                ?.let { values ->
-                    buildList {
-                        for (index in 0 until values.length()) {
-                            values.optString(index)
-                                .takeIf { it.isNotBlank() }
-                                ?.let(::add)
-                        }
-                    }
-                }
-                .orEmpty()
-                .joinToString(" • ")
-                .let { if (it.isBlank()) "" else "Námitky: $it" }
-            hint.setText(R.string.swipe_hint)
+    private fun hasMicrophonePermission(): Boolean =
+        checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_RECORD_AUDIO) return
+        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            speechTranscriber.start()
+        } else {
+            screen.showMicrophonePermissionRequired()
         }
     }
 
     private fun handleGlassInput(input: GlassInput) {
         when (input) {
-            GlassInput.NEXT_PROFILE -> loadProfile(ProfileDirection.NEXT)
-            GlassInput.PREVIOUS_PROFILE -> loadProfile(ProfileDirection.PREVIOUS)
-            GlassInput.EXIT_APP -> runOnUiThread { finishAndRemoveTask() }
+            GlassInput.SUBMIT_TRANSCRIPT -> submitTranscriptAndLoadProduct()
+            GlassInput.EXIT_APP -> runOnUiThread {
+                speechTranscriber.stop()
+                finishAndRemoveTask()
+            }
         }
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_UP) {
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
             when (event.keyCode) {
-                KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    handleGlassInput(GlassInput.NEXT_PROFILE)
-                    return true
-                }
-                KeyEvent.KEYCODE_DPAD_LEFT -> {
-                    handleGlassInput(GlassInput.PREVIOUS_PROFILE)
+                KeyEvent.KEYCODE_ENTER,
+                KeyEvent.KEYCODE_DPAD_CENTER,
+                KeyEvent.KEYCODE_DPAD_RIGHT,
+                KeyEvent.KEYCODE_DPAD_LEFT,
+                -> {
+                    submitTranscriptAndLoadProduct()
                     return true
                 }
             }
         }
-
         return super.dispatchKeyEvent(event)
     }
 
-    private fun loadProfile(direction: ProfileDirection?) {
-        if (navigationPending) return
-        navigationPending = true
-        runOnUiThread { hint.setText(R.string.loading_profile) }
+    private fun submitTranscriptAndLoadProduct() {
+        val now = SystemClock.elapsedRealtime()
+        if (productPending || now - lastSubmitAt < INPUT_DEBOUNCE_MS) return
+
+        val submittedTranscript = currentTranscript.trim()
+        if (submittedTranscript.isBlank()) return
+
+        lastSubmitAt = now
+        productPending = true
+
+        speechTranscriber.stop()
+        screen.setHint(R.string.loading_product)
 
         ioExecutor.execute {
-            runCatching { fetchProfileInDirection(direction) }
-                .onSuccess { profile ->
-                    val json = profile.toJson()
-                    val transport = activeNetworkTransport()
-                    lastProfileId = profile.id
-                    getSharedPreferences(PROFILE_PREFS, MODE_PRIVATE)
-                        .edit()
-                        .putString(PROFILE_JSON_KEY, json.toString())
-                        .apply()
-                    showProfile(json)
-                    showConnectionStatus(
-                        getString(R.string.direct_api_ok, transport),
-                    )
-                    sendDiagnosticEvent(
-                        "${ProfileContract.NETWORK_TEST_OK_EVENT}:$transport",
-                    )
+            val submission = runCatching { transcriptSink.submit(submittedTranscript) }
+                .fold(
+                    onSuccess = { it },
+                    onFailure = { error ->
+                        cz.suku.rokidglass.transcription.TranscriptSubmission(
+                            sent = false,
+                            message = error.message ?: "Transkripci se nepodařilo odeslat",
+                        )
+                    },
+                )
+
+            runCatching { productRepository.getRandomProduct(lastProductId) }
+                .onSuccess { product ->
+                    lastProductId = product.id
+                    productCache.save(product)
+                    runOnUiThread {
+                        showProduct(product)
+                        speechTranscriber.reset()
+                        speechTranscriber.start()
+                        screen.setHint(if (submission.sent) {
+                            submission.message
+                        } else {
+                            getString(R.string.test_sink_disabled)
+                        })
+                    }
+                    showConnectionStatus(getString(R.string.direct_api_ok, activeNetworkTransport()))
+                    sendDiagnosticEvent("${RokidContract.PRODUCT_LOADED_EVENT}:${product.id}")
                 }
                 .onFailure { error ->
-                    navigationPending = false
+                    productPending = false
                     val reason = error.message ?: error.javaClass.simpleName
-                    val transport = activeNetworkTransport()
                     showConnectionStatus(
-                        getString(
-                            R.string.direct_api_failed,
-                            transport,
-                            reason,
-                        ),
+                        getString(R.string.direct_api_failed, activeNetworkTransport(), reason),
                     )
                     runOnUiThread {
-                        if (lastProfileId == null) profileName.setText(R.string.profile_load_failed)
-                        hint.setText(R.string.retry_hint)
+                        screen.showProductError()
+                        screen.setHint(R.string.retry_hint)
+                        speechTranscriber.start()
                     }
                     sendDiagnosticEvent(
-                        "${ProfileContract.NETWORK_TEST_FAILED_EVENT}:$transport:$reason",
+                        "${RokidContract.NETWORK_TEST_FAILED_EVENT}:${activeNetworkTransport()}:$reason",
                     )
                 }
         }
     }
 
-    private fun fetchProfileInDirection(direction: ProfileDirection?): FannProfile {
-        var lastError: Exception? = null
-        val ids = FANN_PROFILE_IDS.toList()
-        val currentIndex = ids.indexOf(lastProfileId)
-        val candidateIds = when {
-            direction == ProfileDirection.CURRENT && currentIndex >= 0 ->
-                (0 until ids.size).map { distance ->
-                    ids[(currentIndex + distance).mod(ids.size)]
-                }
-            direction == null || currentIndex < 0 -> ids
-            else -> (1..ids.size).map { distance ->
-                val index = (currentIndex + direction.step * distance).mod(ids.size)
-                ids[index]
-            }
-        }
-
-        for (profileId in candidateIds) {
-            try {
-                return fetchProfile(profileId)
-            } catch (error: ProfileUnavailableException) {
-                lastError = error
-            } catch (error: IOException) {
-                throw error
-            }
-        }
-        throw lastError ?: IllegalStateException("FAnn API neobsahuje dostupný profil")
-    }
-
-    private fun fetchProfile(profileId: Int): FannProfile {
-        val connection = (URL("$PROFILE_URL/$profileId").openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = NETWORK_TIMEOUT_MS
-            readTimeout = NETWORK_TIMEOUT_MS
-            setRequestProperty("Accept", "application/json")
-        }
-
-        try {
-            val responseCode = connection.responseCode
-            if (responseCode !in 200..299) {
-                throw ProfileUnavailableException("FAnn API vrátilo HTTP $responseCode")
-            }
-
-            val root = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
-            if (!root.optBoolean("success")) {
-                throw ProfileUnavailableException("FAnn API nevrátilo úspěšnou odpověď")
-            }
-            val data = root.optJSONObject("data")
-                ?: throw ProfileUnavailableException("FAnn API neobsahuje profil")
-            if (data.optInt("published", 1) != 1) {
-                throw ProfileUnavailableException("FAnn profil není publikovaný")
-            }
-            val returnedId = data.optInt("id")
-            if (returnedId != profileId) {
-                throw ProfileUnavailableException("FAnn API vrátilo jiný profil")
-            }
-
-            fun stringList(name: String): List<String> {
-                val values = data.optJSONArray(name) ?: return emptyList()
-                return buildList {
-                    for (index in 0 until values.length()) {
-                        values.optString(index).takeIf(String::isNotBlank)?.let(::add)
-                    }
-                }
-            }
-
-            return FannProfile(
-                id = returnedId,
-                profileNumber = data.optInt("profile_number"),
-                name = data.optString("name"),
-                selectionNeed = data.optString("selection_need"),
-                questions = stringList("questions"),
-                objections = stringList("objections"),
-            )
-        } finally {
-            connection.disconnect()
+    private fun showProduct(product: FannProduct) {
+        runOnUiThread {
+            productPending = false
+            lastProductId = product.id
+            screen.showProduct(product)
         }
     }
 
     private fun showConnectionStatus(message: String) {
-        runOnUiThread { connectionStatus.text = message }
+        runOnUiThread { screen.showConnectionStatus(message) }
     }
 
     private fun sendDiagnosticEvent(event: String) {
@@ -336,44 +264,14 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
-        unregisterReceiver(keyReceiver)
+        unregisterReceiver(inputReceiver)
+        speechTranscriber.destroy()
         ioExecutor.shutdownNow()
         super.onDestroy()
     }
 
     private companion object {
-        const val PROFILE_PREFS = "rokid_profile"
-        const val PROFILE_JSON_KEY = "last_profile_json"
-        const val PROFILE_URL = "https://fann-crm.netlify.app/api/admin/profile"
-        const val NETWORK_TIMEOUT_MS = 10_000
-        val FANN_PROFILE_IDS = 11..20
-    }
-
-    private enum class ProfileDirection(val step: Int) {
-        CURRENT(0),
-        NEXT(1),
-        PREVIOUS(-1),
-    }
-
-    private class ProfileUnavailableException(message: String) : Exception(message)
-
-    private data class FannProfile(
-        val id: Int,
-        val profileNumber: Int,
-        val name: String,
-        val selectionNeed: String,
-        val questions: List<String>,
-        val objections: List<String>,
-    ) {
-        fun toJson(): JSONObject = JSONObject()
-            .put("id", id)
-            .put("profileNumber", profileNumber)
-            .put("name", clean(name.ifBlank { "FAnn zákazník" }))
-            .put("selectionNeed", clean(selectionNeed, 180))
-            .put("questions", JSONArray(questions.take(3).map { clean(it, 130) }))
-            .put("objections", JSONArray(objections.take(2).map { clean(it, 100) }))
-
-        private fun clean(text: String, maxLength: Int = Int.MAX_VALUE): String =
-            text.replace(Regex("\\s+"), " ").trim().take(maxLength)
+        const val REQUEST_RECORD_AUDIO = 1001
+        const val INPUT_DEBOUNCE_MS = 700L
     }
 }

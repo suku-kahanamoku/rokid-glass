@@ -386,6 +386,27 @@ class MainActivity : AppCompatActivity() {
                 }
                 else -> runOnUiThread {
                     when {
+                        caps.at(0).string == TRANSCRIPTION_READY_EVENT -> {
+                            showStatus(
+                                getString(R.string.rokid_transcription_ready),
+                                enableButton = true,
+                            )
+                        }
+                        caps.at(0).string == AUDIO_STREAM_EVENT -> {
+                            showStatus(getString(R.string.rokid_audio_stream), enableButton = true)
+                        }
+                        caps.at(0).string == AUDIO_SIGNAL_EVENT -> {
+                            showStatus(getString(R.string.rokid_audio_signal), enableButton = true)
+                        }
+                        caps.at(0).string == AUDIO_NO_SIGNAL_EVENT -> {
+                            showStatus(getString(R.string.rokid_audio_no_signal), enableButton = true)
+                        }
+                        caps.at(0).string.startsWith("$TRANSCRIPTION_ERROR_EVENT:") -> {
+                            showStatus(
+                                caps.at(0).string.substringAfter(':'),
+                                enableButton = true,
+                            )
+                        }
                         caps.at(0).string.startsWith(NETWORK_TEST_OK_EVENT) -> {
                             showStatus(
                                 getString(
@@ -434,6 +455,11 @@ class MainActivity : AppCompatActivity() {
 
         const val EVENT_COMMAND = "cz.suku.rokidglass.event"
         const val READY_EVENT = "ready"
+        const val TRANSCRIPTION_READY_EVENT = "transcription_ready"
+        const val AUDIO_STREAM_EVENT = "audio_stream"
+        const val AUDIO_SIGNAL_EVENT = "audio_signal"
+        const val AUDIO_NO_SIGNAL_EVENT = "audio_no_signal"
+        const val TRANSCRIPTION_ERROR_EVENT = "transcription_error"
         const val NETWORK_TEST_OK_EVENT = "network_test_ok"
         const val NETWORK_TEST_FAILED_EVENT = "network_test_failed"
     }

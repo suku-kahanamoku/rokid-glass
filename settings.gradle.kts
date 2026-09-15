@@ -18,3 +18,6 @@ dependencyResolutionManagement {
 rootProject.name = "rokid-glass"
 include(":app")
 include(":device")
+include(":modules:glasses-platform")
+include(":modules:products")
+include(":modules:transcription")
