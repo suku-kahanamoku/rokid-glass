@@ -5,6 +5,7 @@
     <string name="rokid_auth_failed">Autorizace přes Hi Rokid selhala.</string>
     <string name="rokid_connection_failed">Spojení s brýlemi selhalo.</string>
     <string name="rokid_bluetooth_waiting">CXR je připojené, čekám na Bluetooth brýlí…</string>
+    <string name="rokid_bluetooth_disconnected">Bluetooth spojení s brýlemi bylo přerušeno.</string>
     <string name="rokid_checking_device_app">Kontroluji aplikaci v brýlích…</string>
     <string name="rokid_installing_device_app">Nahrávám a instaluji aplikaci do brýlí…</string>
     <string name="rokid_device_app_install_failed">Instalace aplikace do brýlí selhala: %1$s</string>

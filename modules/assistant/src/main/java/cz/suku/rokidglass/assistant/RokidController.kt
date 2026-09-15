@@ -296,7 +296,7 @@ class RokidController(context: Context) {
                 stopGlassesMicrophone()
                 appRunning = false
                 deviceReady = false
-                publish(appContext.getString(R.string.rokid_bluetooth_waiting), true)
+                publish(appContext.getString(R.string.rokid_bluetooth_disconnected), true)
             }
         }
 

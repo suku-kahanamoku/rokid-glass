@@ -1,16 +1,20 @@
 package cz.suku.rokidglass
 
+import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.view.Gravity
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -42,6 +46,16 @@ class PhoneActivity : AppCompatActivity() {
             service = null
             bound = false
             renderState(disconnectedState())
+        }
+    }
+
+    private val bluetoothPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { grants ->
+        if (grants.values.all { it }) {
+            authorizeAndConnect()
+        } else {
+            service?.controller?.reportStatus(getString(R.string.rokid_bluetooth_permission_required), true)
         }
     }
 
@@ -91,7 +105,21 @@ class PhoneActivity : AppCompatActivity() {
 
     private fun launchDeviceApp() {
         val controller = service?.controller ?: return
-        if (controller.isConnected) controller.launchDeviceApp() else authorizeAndConnect()
+        if (controller.isConnected) {
+            controller.launchDeviceApp()
+        } else if (missingBluetoothPermissions().isNotEmpty()) {
+            bluetoothPermissionLauncher.launch(missingBluetoothPermissions().toTypedArray())
+        } else {
+            authorizeAndConnect()
+        }
+    }
+
+    private fun missingBluetoothPermissions(): List<String> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return emptyList()
+        return listOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+            .filter {
+                ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+            }
     }
 
     private fun authorizeAndConnect() {

@@ -22,6 +22,7 @@ class VoskPcmStreamTranscriber(
     private val applicationContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
     private val recognizerLock = Any()
+    private val enhancer = PcmAudioEnhancer()
     private var model: Model? = null
     private var recognizer: Recognizer? = null
     private var finalizedText = ""
@@ -54,6 +55,7 @@ class VoskPcmStreamTranscriber(
     fun acceptPcm(data: ByteArray, offset: Int, length: Int) {
         if (destroyed || offset < 0 || length <= 0 || offset + length > data.size) return
         val audio = if (offset == 0) data else data.copyOfRange(offset, offset + length)
+        enhancer.process(audio, 0, length)
         val result = runCatching {
             synchronized(recognizerLock) {
                 val loadedRecognizer = recognizer ?: return

@@ -13,4 +13,5 @@
     <string name="rokid_missing_app">Nainstaluj nebo aktualizuj aplikaci Hi Rokid.</string>
     <string name="rokid_auth_cancelled">Autorizace byla zrušena. Zkus to znovu.</string>
     <string name="rokid_auth_failed">Autorizace přes Hi Rokid selhala.</string>
+    <string name="rokid_bluetooth_permission_required">Aplikace potřebuje oprávnění Bluetooth pro připojení k brýlím.</string>
 </resources>
