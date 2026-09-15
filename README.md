@@ -147,10 +147,38 @@ Device APK má vlastní balíček a nenahrazuje Hi Rokid ani systémové Rokid
 aplikace. Případný rollback udělej sestavením staršího kódu s novým, vyšším
 `versionCode`; Android běžně blokuje downgrade na nižší číslo verze.
 
-## Google Play / podepsaný AAB
+## Produkční deploy přes Google Play
+
+Následující postup použij při každém vydání nové verze.
+
+### 1. Změna čísel verzí
+
+Před každým novým nahráním na Google Play zvyš `versionCode` telefonu v
+`app/build.gradle.kts`. `versionName` změň na uživatelské označení nové verze:
+
+```kotlin
+versionCode = 3
+versionName = "1.2"
+```
+
+Pokud se změnil také modul `device`, zvyš jeho vlastní `versionCode` a
+`versionName` v `device/build.gradle.kts`, například:
+
+```kotlin
+versionCode = 12
+versionName = "1.11"
+```
+
+Platí:
+
+- změna pouze telefonní aplikace: zvyš jen verzi `app`;
+- změna aplikace v brýlích: zvyš verzi `app` i `device`;
+- změna pouze profilů nebo dat na backendu: Android deploy není potřeba.
+
+### 2. Release keystore
 
 Soubor `keystore.properties` v kořeni projektu je lokální a Git jej ignoruje.
-Doplň do něj skutečné údaje ke keystoru:
+Obsahuje údaje ke stálému release keystoru:
 
 ```properties
 storeFile=/home/suku/.android/rokid-glass-upload.jks
@@ -164,37 +192,82 @@ Hesla neposílej do chatu a soubor necommituj. Struktura je také připravená v
 `ROKID_UPLOAD_STORE_FILE`, `ROKID_UPLOAD_STORE_PASSWORD`,
 `ROKID_UPLOAD_KEY_ALIAS` a `ROKID_UPLOAD_KEY_PASSWORD`.
 
-Před každým dalším nahráním na Google Play zvyš `versionCode` telefonu v
-`app/build.gradle.kts`. Pokud se změnil modul `device`, zvyš také jeho vlastní
-`versionCode` v `device/build.gradle.kts`.
+Keystore neměň a bezpečně jej zálohuj. Telefonní i device aplikace musí při
+dalších aktualizacích zachovat svůj podpis.
 
-Produkční balíček vytvoří jeden příkaz:
+### 3. Kontrola a sestavení
+
+V kořeni projektu spusť:
 
 ```bash
-./gradlew :app:bundleRelease
+cd /home/suku/Workspace/rokid-glass
+./gradlew :app:lintRelease :device:lintRelease :app:bundleRelease
 ```
 
-Výsledkem pro Google Play je:
+Příkaz automaticky:
+
+1. zkontroluje oba moduly;
+2. sestaví a podepíše release APK pro brýle;
+3. vloží device APK do telefonní aplikace;
+4. sestaví a podepíše telefonní AAB.
+
+Příkaz `clean` není před každým sestavením nutný. Výsledný soubor pro Google
+Play vznikne zde:
 
 ```text
 app/build/outputs/bundle/release/app-release.aab
 ```
 
-Na Google Play se nahrává pouze tento AAB. Release APK pro brýle se při buildu
-automaticky sestaví, podepíše a vloží dovnitř telefonní aplikace jako asset;
-samostatně se do Google Play nenahrává.
-
-Podpis hotového AAB lze ověřit příkazem:
+Podpis lze ověřit:
 
 ```bash
-jarsigner -verify -verbose -certs app/build/outputs/bundle/release/app-release.aab
+jarsigner -verify app/build/outputs/bundle/release/app-release.aab
 ```
 
-Pozor při prvním přechodu: device aplikace, která je nyní v testovacích brýlích,
-byla instalována s debug podpisem. Android ji nepovolí přepsat APK s release
-podpisem. Nejdřív ji proto přes telefonní aplikaci jednou odinstaluj a potom
-nainstaluj release verzi. Další release aktualizace už půjdou přes sebe, pokud
-zůstane stejný keystore a bude se zvyšovat `versionCode`.
+Výstup musí obsahovat `jar verified.`.
+
+### 4. Nahrání na Google Play
+
+1. V požadované sekci Google Play Console vytvoř nové vydání.
+2. Nahraj pouze `app/build/outputs/bundle/release/app-release.aab`.
+3. Doplň poznámky k vydání.
+4. Ulož a odešli vydání do interního, uzavřeného nebo produkčního testování.
+
+Samostatné `device-release.apk` do Google Play nenahrávej. Je už vložené uvnitř
+telefonní aplikace.
+
+### 5. Aktualizace telefonu a brýlí
+
+Po zpřístupnění nové verze:
+
+1. nainstaluj nebo aktualizuj telefonní aplikaci z Google Play;
+2. připoj brýle v Hi Rokid;
+3. otevři telefonní aplikaci Rokid Glass;
+4. stiskni tlačítko pro instalaci/spuštění aplikace v brýlích;
+5. telefon porovná `versionCode` vložené device APK a případnou novou verzi
+   nahraje do brýlí.
+
+Pokud se modul `device` nezměnil, jeho aplikace se zbytečně znovu instalovat
+nebude.
+
+### Jednorázový přechod z debug verze
+
+Debug a produkční aplikace mají jiné podpisy, a proto se přes sebe nemohou
+aktualizovat. Při úplně prvním přechodu na verzi z Google Play:
+
+1. ještě ve stávající debug telefonní aplikaci odinstaluj device aplikaci z
+   brýlí;
+2. odinstaluj debug aplikaci Rokid Glass z telefonu;
+3. nainstaluj telefonní aplikaci z Google Play;
+4. připoj brýle a přes novou telefonní aplikaci nainstaluj release device APK.
+
+Tento postup je potřeba jen jednou. Další produkční aktualizace se instalují přes
+stávající verzi, pokud zůstane stejný keystore a vždy se zvýší příslušný
+`versionCode`.
+
+Rollback se provádí jako nové vydání: sestav starší funkční zdrojový kód, ale
+nastav mu vyšší `versionCode`. Google Play ani Android běžně nepovolí instalaci
+balíčku s nižším číslem verze.
 
 ## Samostatný provoz a FAnn CRM API
 
