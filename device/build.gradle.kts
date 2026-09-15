@@ -1,34 +1,5 @@
-import org.gradle.api.DefaultTask
-import org.gradle.api.file.DirectoryProperty
-import org.gradle.api.file.RegularFileProperty
-import org.gradle.api.tasks.InputFile
-import org.gradle.api.tasks.OutputDirectory
-import org.gradle.api.tasks.PathSensitive
-import org.gradle.api.tasks.PathSensitivity
-import org.gradle.api.tasks.TaskAction
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
-
-abstract class EmbedDeviceApkTask : DefaultTask() {
-    @get:InputFile
-    @get:Optional
-    @get:PathSensitive(PathSensitivity.RELATIVE)
-    abstract val deviceApk: RegularFileProperty
-
-    @get:OutputDirectory
-    abstract val outputDirectory: DirectoryProperty
-
-    @TaskAction
-    fun embed() {
-        val apk = deviceApk.orNull?.asFile ?: throw GradleException("Device APK property is not set")
-        if (!apk.exists()) {
-            throw GradleException("Device APK not found at ${apk.absolutePath}. Make sure the :device project is built correctly.")
-        }
-        val outputFile = outputDirectory.file("rokid-glass-device.apk").get().asFile
-        outputFile.parentFile.mkdirs()
-        apk.copyTo(outputFile, overwrite = true)
-    }
-}
 
 val releaseSigningFile = rootProject.file("keystore.properties")
 val releaseSigningProperties = Properties().apply {
@@ -56,7 +27,7 @@ val releaseSigningConfigured = listOf(
 
 val validateReleaseSigning by tasks.registering {
     group = "verification"
-    description = "Ověří lokální konfiguraci release podpisu."
+    description = "Ověří lokální konfiguraci release podpisu device APK."
     doLast {
         check(releaseSigningConfigured) {
             "Doplň storeFile, storePassword, keyAlias a keyPassword do " +
@@ -74,15 +45,15 @@ plugins {
 }
 
 android {
-    namespace = "cz.suku.rokidglass"
+    namespace = "cz.suku.rokidglass.device"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "cz.suku.rokidglass"
+        applicationId = "cz.suku.rokidglass.device"
         minSdk = 31
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 11
+        versionName = "1.10"
     }
 
     signingConfigs {
@@ -113,39 +84,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-
-}
-
-androidComponents {
-    onVariants(selector().all()) { variant ->
-        val variantName = variant.name.replaceFirstChar { it.uppercase() }
-        val deviceBuildType = if (variant.buildType == "release") "release" else "debug"
-        val deviceBuildTypeName = deviceBuildType.replaceFirstChar { it.uppercase() }
-        val embedTask = tasks.register<EmbedDeviceApkTask>(
-            "embedDevice${variantName}Apk",
-        ) {
-            group = "build"
-            description = "Sestaví $deviceBuildType device APK a vloží ji do ${variant.name} assets."
-            val deviceProject = project(":device")
-            val assembleTask = deviceProject.tasks.named("assemble$deviceBuildTypeName")
-            dependsOn(assembleTask)
-            deviceApk.set(
-                assembleTask.flatMap {
-                    deviceProject.layout.buildDirectory.file(
-                        "outputs/apk/$deviceBuildType/device-$deviceBuildType.apk",
-                    )
-                }
-            )
-            outputDirectory.set(
-                layout.buildDirectory.dir("generated/device-apk/${variant.name}/assets"),
-            )
-        }
-
-        variant.sources.assets?.addGeneratedSourceDirectory(
-            embedTask,
-            EmbedDeviceApkTask::outputDirectory,
-        )
-    }
 }
 
 tasks.matching { it.name == "preReleaseBuild" }.configureEach {
@@ -159,6 +97,6 @@ kotlin {
 }
 
 dependencies {
-    implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("com.rokid.cxr:client-l:1.1.1")
+    implementation("androidx.core:core-ktx:1.10.1")
+    implementation("com.rokid.cxr:cxr-service-bridge:1.0-20260715.121510-107")
 }

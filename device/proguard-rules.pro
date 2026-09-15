@@ -1,0 +1,2 @@
+-keep class com.rokid.cxr.** { *; }
+-dontwarn com.rokid.cxr.**

@@ -2,9 +2,12 @@
 .gradle/
 .idea/
 local.properties
+/keystore.properties
 build/
 captures/
 .externalNativeBuild/
 .cxx/
 app/build/
-
+device/build/
+/app/release/
+/device/release/

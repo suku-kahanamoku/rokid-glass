@@ -1,0 +1,13 @@
+<resources>
+    <string name="direct_api_ok">Přímé API funguje (%1$s)</string>
+    <string name="direct_api_failed">Přímé API nefunguje (%1$s): %2$s</string>
+    <string name="app_name">FAnn profily</string>
+    <string name="standalone_mode">Samostatný režim</string>
+    <string name="waiting_for_phone">Načítám první profil…</string>
+    <string name="swipe_hint">Posuň dopředu: další • dozadu: předchozí • dvojklik: zavřít</string>
+    <string name="loading_profile">Načítám profil…</string>
+    <string name="profile_load_failed">Profil se nepodařilo načíst</string>
+    <string name="retry_hint">Zkontroluj Wi-Fi a posunem načítání opakuj • dvojklik: zavřít</string>
+    <string name="profile_label">FANN PROFIL</string>
+    <string name="profile_label_number">FANN PROFIL %1$d</string>
+</resources>

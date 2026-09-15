@@ -1,15 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-phone_project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-device_project_dir="$(cd "$phone_project_dir/../rokid-glass-device" && pwd)"
-device_apk="$device_project_dir/app/build/outputs/apk/debug/app-debug.apk"
-target_dir="$phone_project_dir/app/src/main/assets"
-target_apk="$target_dir/rokid-glass-device.apk"
+project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+device_apk="$project_dir/device/build/outputs/apk/debug/device-debug.apk"
+embedded_apk="$project_dir/app/build/generated/device-apk/debug/assets/rokid-glass-device.apk"
 
-"$device_project_dir/gradlew" -p "$device_project_dir" lintDebug assembleDebug
+"$project_dir/gradlew" -p "$project_dir" :device:lintDebug :app:assembleDebug
 
-mkdir -p "$target_dir"
-cp "$device_apk" "$target_apk"
-
-echo "Device APK vložena do: $target_apk"
+echo "Device APK: $device_apk"
+echo "Device APK vložená do telefonního buildu: $embedded_apk"
